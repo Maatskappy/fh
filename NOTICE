@@ -16,8 +16,8 @@ docs/fx-provenance.md in the bundle. Attribution does not imply endorsement.
 Wasmtime 48.0.8, Bytecode Alliance:
 fh statically embeds the full Wasmtime C API, Apache-2.0 WITH LLVM-exception.
 https://github.com/bytecodealliance/wasmtime/releases/tag/v48.0.8
-The complete license and pinned archive/source provenance are retained in
-licenses/wasmtime/LICENSE and licenses/wasmtime/README.md. Native library
+The complete license, pinned archive/source provenance, macOS arm64 dependency
+notices and Rust runtime notices are retained under licenses/wasmtime/. Native library
 archives are fetched for builds, not committed in this source tree. The retained
 guest Wasm modules do not contain the host Wasmtime runtime.
 
@@ -51,7 +51,10 @@ License source paths and versions are documented in licenses/README.md.
 The new standalone increment-source, increment-wasm and workspace-check Loop
 packages also carry local LICENSE/NOTICE files and applicable complete licenses.
 
-These retained notices cover identified components. The exact full static
-Wasmtime transitive feature/dependency graph and target-specific notice closure
-remain prerequisites before binary publication. They do not establish exhaustive
-third-party coverage or legal/ownership clearance.
+The macOS arm64 binary notice set retains all 235 packages in the resolved
+Wasmtime C API normal/build dependency graph, including native ring and Zstandard
+code and generated data. Build tools and optional source are included
+conservatively; their inclusion does not assert that all their code is linked.
+Zstandard uses its BSD-3-Clause alternative. Rust 1.97.0 standard-library and
+compiler-builtins notices are retained under licenses/wasmtime/rust-1.97.0/.
+See licenses/wasmtime/README.md for verified artifact and toolchain provenance.

@@ -1,8 +1,12 @@
 # Releasing fh
 
-Use this guide to build local archives. The commands upload nothing. Public binaries are not published yet. See [publication status](publication.md).
+Install the macOS arm64 release (macOS 13 or newer):
 
-Binary distribution still requires a complete static dependency notice inventory and validation on intended platforms.
+```sh
+curl -fsSL https://github.com/Maatskappy/fh/releases/latest/download/install.sh | sh
+```
+
+Only macOS arm64 binaries are offered. Other platforms use the [source build](../README.md#build-from-source). The commands below build local archives and upload nothing.
 
 Use exactly Zig 0.16.0, Python 3 and Git from a source checkout. To isolate Zig caches, set `ZIG_LOCAL_CACHE_DIR` and `ZIG_GLOBAL_CACHE_DIR`. Otherwise Zig uses its ordinary cache configuration.
 
@@ -14,11 +18,10 @@ Build and inspect the archives before any separate publication decision:
 2. Run the release script:
 
    ```sh
-   ./scripts/release.sh            # the version in the source, into release/
-   ./scripts/release.sh 0.3.1 --out /some/folder
+   ./scripts/release.sh --out release --targets aarch64-macos
    ```
 
-   The script runs `zig build test-loops-native` and `python3 patches/fx/verify.py` once. Either failure stops it. It then builds the same bundle as `scripts/build.sh`, once per target. A supplied version must match source. It cannot relabel the archive.
+   The script runs `zig build test-loops-native` and `python3 patches/fx/verify.py` once. Either failure stops it. It then builds the same bundle as `scripts/build.sh`, once per selected target. Retain the complete `licenses/` directory in each archive. A supplied version must match source. It cannot relabel the archive.
 3. Test the installer:
 
    ```sh
@@ -32,7 +35,7 @@ For a fast version-tooling regression check, run `python3 -m unittest discover -
 
 ## What is built
 
-The script builds these target archives:
+The script can build these target archives. Only `aarch64-macos` is published:
 
 | Target | Zig target | Archive |
 | --- | --- | --- |
@@ -63,22 +66,24 @@ Packing uses fixed order, owners, modes and timestamps. Timestamps use `SOURCE_D
 
 ## Hosting
 
-Supply an explicit `FH_INSTALL_BASE` to use the installer. Without it, installation fails before networking. The local test script supplies a loopback HTTP base. Repository tools and CI upload no releases.
+GitHub Releases on [Maatskappy/fh](https://github.com/Maatskappy/fh/releases) hosts the installer and archives. Upload `install.sh`, the archive, `SHA256SUMS` and `manifest.json` to the version tag `vVERSION` after review and release authorization. Build from the merged commit before tagging. Repository tools and CI upload nothing.
 
-A release base must serve this relative layout:
+`FH_VERSION=VERSION` (or `vVERSION`) selects an explicit version. `FH_INSTALL_BASE` overrides the release root, which defaults to `https://github.com/Maatskappy/fh/releases`. A mirror must serve the same URL layout:
 
 ```text
-VERSION/SHA256SUMS
-VERSION/manifest.json
-VERSION/fh-VERSION-OS-ARCH.tar.gz    (one per target)
-latest/...                         (the same files for the chosen latest version)
+latest/download/SHA256SUMS          (may redirect to the selected tag)
+download/vVERSION/SHA256SUMS
+download/vVERSION/manifest.json
+download/vVERSION/fh-VERSION-macos-aarch64.tar.gz
 ```
 
-For `latest`, the installer reads the version from the archive name in `SHA256SUMS`. Checksums detect corruption. You remain responsible for trusting the release base.
+For `latest`, the installer reads the version from the macOS arm64 archive name in `SHA256SUMS`. It then fetches `SHA256SUMS` again and downloads the archive from that fixed version tag. A new latest release cannot mix those two files. Checksums detect corruption; use a release host you trust.
 
 ## Signing and notarization
 
-Developer ID signing and notarization are not configured. Zig ad-hoc signs arm64 macOS executables. Gatekeeper may restrict downloads. A working local build does not establish that downloaded archives run elsewhere.
+The macOS arm64 binary is ad-hoc signed by Zig. It is not Developer ID signed or notarized. Release notes state this and record the OS and architecture used for the install and first-Loop checks.
+
+The curl installer writes downloaded bytes without adding a browser quarantine attribute. If you download through a browser and macOS blocks the extracted binary, follow [Apple's instructions for opening a trusted app](https://support.apple.com/en-us/102445). Verify the release checksum before allowing it.
 
 ## Removing old versions
 
@@ -92,7 +97,7 @@ The installer is POSIX sh and requires:
 - tar.
 - sha256sum, shasum or openssl.
 
-It accepts only macOS or Linux on arm64 or x86_64. It downloads `SHA256SUMS`, selects the machine's archive and downloads it. A mismatched SHA-256 stops installation without installing anything.
+It accepts only macOS arm64. It downloads `SHA256SUMS`, selects the machine's archive and downloads it. A mismatched SHA-256 stops installation without installing anything.
 
 After verification, it unpacks into `${FH_INSTALL_DIR:-~/.fh/app}/VERSION/`. It runs the new `fh --version` once, then renames a new link over `${FH_BIN_DIR:-~/.local/bin}/fh`. It never uses sudo or edits shell profiles.
 

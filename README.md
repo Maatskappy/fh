@@ -2,6 +2,19 @@
 
 fh is a native Zig terminal agent for creating and running reusable **Loops**. A Loop combines instructions, schemas and saved code. fh checks data, carries feedback between bounded attempts and saves each result.
 
+## Install on macOS arm64
+
+Requires macOS 13 or newer:
+
+```sh
+curl -fsSL https://github.com/Maatskappy/fh/releases/latest/download/install.sh | sh
+~/.local/bin/fh --version
+```
+
+The installer verifies SHA-256, keeps the complete bundle in `~/.fh/app/VERSION/`, and links `~/.local/bin/fh`. It prints a PATH command if needed. The binary is ad-hoc signed and is not notarized. See [release installation](docs/releasing.md#signing-and-notarization) if macOS blocks it.
+
+Binary releases are offered for macOS arm64 only. Other platforms use the source build below.
+
 ## Build from source
 
 Build fh with these tools:
@@ -26,7 +39,7 @@ The script runs native Loop tests and the fx provenance audit. It then builds th
 
 ## First Loop: no credentials
 
-Run the bundled Wasm example from the checkout root after building. Use a new private profile. Keep inputs outside the package because every package file contributes to its identity.
+Run the bundled Wasm example from the checkout root after building. For an installed release, replace `./dist` with `~/.fh/app/VERSION` (the version printed by `fh --version`). Use a new private profile. Keep inputs outside the package because every package file contributes to its identity.
 
 ```sh
 fh_profile="$(mktemp -d "${TMPDIR:-/tmp}/fh.XXXXXX")" &&
@@ -109,7 +122,7 @@ Agent guides are [using-fh](skills/using-fh/SKILL.md) and [author-loop](skills/a
 
 ## Status
 
-fh is experimental. Interfaces and package formats are evolving. Independent cross-runner compatibility is unverified. Public binaries are not published yet.
+fh is experimental. Interfaces and package formats are evolving. Independent cross-runner compatibility is unverified.
 
 Platform evidence is limited to these checks:
 
@@ -132,4 +145,4 @@ fh builds on the actual [fx CLI](https://github.com/vercel-labs/fx). It uses fx'
 | --- | --- |
 | fh-owned additions | [Apache-2.0](LICENSE). Retain [NOTICE](NOTICE) and third-party license texts. |
 | fx | `4d966e272cfc4296cdf703f409480088cf2e72ba` (0.0.13). Original [license](vendor/fx/LICENSE) and [notices](vendor/fx/THIRD_PARTY_NOTICES.md) retained. The [provenance check](patches/fx/README.md) reconstructs all 637 originals and verifies the integration patch. |
-| Wasmtime | The build fetches and statically links 48.0.8 under Apache-2.0 WITH LLVM-exception. The complete [license](licenses/wasmtime/LICENSE) and other known compiled-code and data notices are retained. |
+| Wasmtime | The build fetches and statically links 48.0.8 under Apache-2.0 WITH LLVM-exception. The complete [license](licenses/wasmtime/LICENSE) and [macOS arm64 dependency notices](licenses/wasmtime/README.md#macos-arm64-binary-notices) are retained. |

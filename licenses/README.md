@@ -34,8 +34,9 @@ The fh generator is `tests/native/fixtures/workspace-check/generate-printable.py
 in the source checkout. Complete pinned Python terms cover this derived data.
 The module embeds no Python interpreter.
 
-## Binary publication boundary
+## Binary notices
 
-A binary release still needs the exact static Wasmtime transitive dependency
-graph and target-specific notices. This inventory attributes known components.
-It is neither an exhaustive dependency audit nor legal clearance.
+The [macOS arm64 Wasmtime inventory](wasmtime/README.md#macos-arm64-binary-notices)
+retains all 235 resolved dependencies, including build tools and generated-data
+sources, plus Rust standard-library and compiler-runtime notices. Other targets
+need their own notice review before binary publication.
