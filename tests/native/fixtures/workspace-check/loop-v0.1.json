@@ -1,0 +1,17 @@
+{
+  "format": "loops/0.1",
+  "name": "workspace-check",
+  "version": "0.1.0",
+  "description": "Suggest a next step from an explicit bounded workspace snapshot without executing discovered packages.",
+  "inputs": {"schema": "schemas/input.json"},
+  "steps": [{
+    "id": "suggest",
+    "kind": "code",
+    "runtime": "python3",
+    "requires": [],
+    "file": "suggest.py",
+    "input": {"from": "/input"},
+    "output": {"schema": "schemas/output.json"}
+  }],
+  "output": {"from": "/steps/suggest/output"}
+}

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Keyboard browser check</title>
+<h1>Keyboard browser check</h1>
+<label>Name <input id="name" type="text" maxlength="80"></label>
+<label><input id="confirm" type="checkbox"> Confirm greeting</label>
+<button id="greet" type="button">Greet</button>
+<p id="result" role="status">Waiting</p>
+<script>
+greet.addEventListener('click', () => {
+  result.textContent = document.getElementById("confirm").checked ? `Hello, ${document.getElementById("name").value}!` : 'Confirmation required';
+});
+</script></html>

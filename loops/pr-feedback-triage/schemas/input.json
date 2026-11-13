@@ -1,0 +1,92 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "head_sha",
+    "feedback"
+  ],
+  "properties": {
+    "head_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "feedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sha",
+        "kind",
+        "status",
+        "text",
+        "url",
+        "check_name",
+        "file",
+        "line",
+        "review_blocked"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sha": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "kind": {
+          "enum": [
+            "review",
+            "check"
+          ]
+        },
+        "status": {
+          "enum": [
+            "none",
+            "pending",
+            "pass",
+            "fail"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 6000
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "check_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "review_blocked": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

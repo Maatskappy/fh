@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "path": "greet",
+      "pass": 0,
+      "input": {
+        "name": "Ada"
+      },
+      "output": {
+        "greeting": "Hello Ada"
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "greeting": "Hello Ada"
+    }
+  }
+}

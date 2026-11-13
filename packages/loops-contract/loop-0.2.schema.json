@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fasthands.dev/contracts/loops/0.2/manifest",
+  "type": "object",
+  "required": [
+    "format",
+    "name",
+    "version",
+    "inputs",
+    "steps",
+    "output"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "loops/0.2"
+    },
+    "name": {
+      "$ref": "#/$defs/nonempty"
+    },
+    "version": {
+      "$ref": "#/$defs/nonempty"
+    },
+    "description": {
+      "type": "string"
+    },
+    "inputs": {
+      "$ref": "#/$defs/output"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/infer"
+          },
+          {
+            "$ref": "#/$defs/code"
+          },
+          {
+            "$ref": "#/$defs/decision"
+          }
+        ]
+      }
+    },
+    "output": true,
+    "repeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "through",
+        "until",
+        "max_iterations"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "through": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "until": true,
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "carry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "initial",
+            "next"
+          ],
+          "properties": {
+            "initial": true,
+            "next": true
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonempty": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "schema": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/nonempty"
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "schema"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/schema"
+        }
+      }
+    },
+    "requires": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "browser",
+          "computer",
+          "web_search"
+        ]
+      }
+    },
+    "infer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "input",
+        "output",
+        "instructions"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "kind": {
+          "const": "infer"
+        },
+        "input": true,
+        "output": {
+          "$ref": "#/$defs/output"
+        },
+        "instructions": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        },
+        "complexity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    },
+    "code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "input",
+        "output",
+        "file",
+        "runtime"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "kind": {
+          "const": "code"
+        },
+        "input": true,
+        "output": {
+          "$ref": "#/$defs/output"
+        },
+        "file": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "runtime": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        }
+      }
+    },
+    "structured": {
+      "type": [
+        "string",
+        "object",
+        "array"
+      ]
+    },
+    "noulQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "instructions"
+      ],
+      "properties": {
+        "instructions": {
+          "$ref": "#/$defs/structured"
+        },
+        "type": {
+          "const": "noul"
+        },
+        "criteria": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "true": {
+              "$ref": "#/$defs/structured"
+            },
+            "false": {
+              "$ref": "#/$defs/structured"
+            }
+          }
+        }
+      }
+    },
+    "choiceQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "instructions",
+        "criteria"
+      ],
+      "properties": {
+        "instructions": {
+          "$ref": "#/$defs/structured"
+        },
+        "type": {
+          "const": "choice"
+        },
+        "criteria": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 255,
+          "propertyNames": {
+            "$ref": "#/$defs/nonempty"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/structured"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "scoreQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "instructions",
+        "criteria"
+      ],
+      "properties": {
+        "instructions": {
+          "$ref": "#/$defs/structured"
+        },
+        "type": {
+          "const": "score"
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/structured"
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "input",
+        "output",
+        "questions"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "kind": {
+          "const": "decision"
+        },
+        "input": true,
+        "output": {
+          "$ref": "#/$defs/output"
+        },
+        "requires": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "questions": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "propertyNames": {
+            "$ref": "#/$defs/nonempty"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/noulQuestion"
+              },
+              {
+                "$ref": "#/$defs/choiceQuestion"
+              },
+              {
+                "$ref": "#/$defs/scoreQuestion"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

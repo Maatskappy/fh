@@ -1,0 +1,81 @@
+{
+  "format": "loops/0.1",
+  "name": "description-length-refinement",
+  "version": "1.0.0",
+  "inputs": {
+    "schema": "schemas/input.json"
+  },
+  "steps": [
+    {
+      "id": "write",
+      "kind": "infer",
+      "requires": [],
+      "input": {
+        "subject": {
+          "from": "/input/subject"
+        },
+        "max_words": {
+          "from": "/input/max_words"
+        },
+        "previous": {
+          "from": "/carry"
+        }
+      },
+      "output": {
+        "schema": "schemas/draft.json"
+      },
+      "complexity": "medium",
+      "instructions": "Write a useful description of the subject. When previous.draft is null, write exactly four sentences with at least ten words per sentence. Otherwise revise previous.draft using previous.feedback to meet max_words. Return JSON with a draft string."
+    },
+    {
+      "id": "assess",
+      "kind": "code",
+      "requires": [],
+      "input": {
+        "draft": {
+          "from": "/steps/write/output/draft"
+        },
+        "max_words": {
+          "from": "/input/max_words"
+        }
+      },
+      "output": {
+        "schema": "schemas/assessment.json"
+      },
+      "runtime": "python3",
+      "file": "assess.py"
+    }
+  ],
+  "output": {
+    "description": {
+      "from": "/steps/write/output/draft"
+    },
+    "assessment": {
+      "from": "/steps/assess/output"
+    }
+  },
+  "repeat": {
+    "from": "write",
+    "through": "assess",
+    "max_iterations": 2,
+    "until": {
+      "from": "/steps/assess/output/ready"
+    },
+    "carry": {
+      "initial": {
+        "value": {
+          "draft": null,
+          "feedback": []
+        }
+      },
+      "next": {
+        "draft": {
+          "from": "/steps/write/output/draft"
+        },
+        "feedback": {
+          "from": "/steps/assess/output/feedback"
+        }
+      }
+    }
+  }
+}

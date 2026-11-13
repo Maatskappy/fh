@@ -1,0 +1,25 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.1\",\n  \"name\": \"conformance-edge\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"prefix\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"value\": {\n          \"label\": \"P\"\n        }\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    },\n    {\n      \"id\": \"produce\",\n      \"kind\": \"infer\",\n      \"requires\": [],\n      \"instructions\": \"Return the next item as JSON.\",\n      \"input\": {\n        \"from\": \"\"\n      },\n      \"output\": {\n        \"schema\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"item\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"item\"\n          ],\n          \"additionalProperties\": false\n        }\n      }\n    },\n    {\n      \"id\": \"judge\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"judge.py\",\n      \"requires\": [],\n      \"input\": {\n        \"item\": {\n          \"from\": \"/steps/produce/output/item\"\n        },\n        \"carry\": {\n          \"from\": \"/carry\"\n        }\n      },\n      \"output\": {\n        \"schema\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"ready\": {\n              \"type\": \"boolean\"\n            },\n            \"note\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"ready\",\n            \"note\"\n          ],\n          \"additionalProperties\": false\n        }\n      }\n    },\n    {\n      \"id\": \"suffix\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"item\": {\n          \"from\": \"/steps/produce/output/item\"\n        },\n        \"assessment\": {\n          \"from\": \"/steps/judge/output\"\n        },\n        \"prefix\": {\n          \"from\": \"/steps/prefix/output\"\n        }\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/suffix/output\"\n  },\n  \"repeat\": {\n    \"from\": \"produce\",\n    \"through\": \"judge\",\n    \"max_iterations\": 3,\n    \"until\": {\n      \"from\": \"/steps/judge/output/ready\"\n    },\n    \"carry\": {\n      \"initial\": {\n        \"prior\": {\n          \"value\": null\n        },\n        \"note\": {\n          \"value\": \"\"\n        }\n      },\n      \"next\": {\n        \"from\": \"/steps/produce/output/absent\"\n      }\n    }\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n",
+    "judge.py": "import json, sys\nx = json.load(sys.stdin)\nready = x[\"item\"] == \"B\"\nprint(json.dumps({\"ready\": ready, \"note\": \"ok\" if ready else \"change\"}))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {},
+  "scenario": {
+    "responses": [
+      {
+        "step": "produce",
+        "pass": 1,
+        "ordinal": 1,
+        "output": {
+          "item": "A"
+        },
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        }
+      }
+    ]
+  }
+}

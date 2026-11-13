@@ -1,0 +1,2716 @@
+--- a/src/core/agent/stream_provider.zig
++++ b/src/core/agent/stream_provider.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const model_capabilities = @import("../config/model_capabilities.zig");
+ const image_attachments = @import("../images/image_attachments.zig");
+@@ -310,6 +311,9 @@
+ pub const Completed = struct {
+     completion: types.ModelCompletion = .{},
+     usage: UsageOutcome = .{ .unavailable = .unbilled },
++    /// Validated terminal token counters, independent of billing attribution.
++    /// fh can meter compatible inference without inventing an exact billing source.
++    final_token_usage: ?types.Usage = null,
+     ownership: ResultOwnership = .borrowed,
+     /// Native references normally borrow completion/credential fields. Copies
+     /// escaping a request allocator own their reference strings separately.
+--- a/src/core/app/app_agent_runtime.zig
++++ b/src/core/app/app_agent_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const agent_runtime = @import("../agent/agent_runtime.zig");
+ const agent_stream_provider = @import("../agent/stream_provider.zig");
+@@ -247,6 +248,7 @@
+                 .provider_strict = selected_provider == .gateway and agent_settings.provider_strict,
+                 .first_call_tool_choice = agent_settings.first_call_tool_choice,
+                 .tool_registry = if (comptime @hasDecl(App, "toolRegistry")) app.toolRegistry() else .{},
++                .host_tool_provider = if (comptime @hasDecl(App, "fhHostToolProvider")) app.fhHostToolProvider() else null,
+                 .subagent_host = if (comptime @hasField(App, "session_persistence"))
+                     app_session_runtime.Runtime(App).subagentHost(app)
+                 else
+@@ -773,6 +775,18 @@
+             ctx.session_grants = request.session_grants;
+             ctx.advertised_dynamic_tool_names = request.advertised_dynamic_tool_names;
+             ctx.max_tool_result_bytes = request.max_tool_result_bytes;
++            if (comptime @hasDecl(App, "isLoopsMode")) {
++                if (App.isLoopsMode()) {
++                    const registered = ctx.tool_registry.lookup(request.call.name) orelse return error.LiveToolAuthorityUnavailable;
++                    _ = try tool_runtime.authorizedExecutionContext(ctx, request);
++                    try @import("../tooling/fh_loop_tools.zig").validateWorkspaceCall(request.call_allocator, ctx.workspace_root, request.call);
++                    if (request.authority == .file_mutation) {
++                        if (!@import("../workspace/pathing.zig").pathInside(ctx.workspace_root, request.authority.file_mutation.policy_targets.canonical_target_path)) return error.LiveToolAuthorityUnavailable;
++                    }
++                    if (registered.executor_kind != .host) return tool_runtime.executeToolCallAuthorized(ctx, request);
++                    return tool_runtime.executeHostToolCallAuthorized(ctx, request);
++                }
++            }
+             return tool_runtime.executeToolCallAuthorized(ctx, request);
+         }
+ 
+@@ -923,6 +937,7 @@
+                 debug_trace.logf("context", "gather failed err={s}", .{@errorName(err)});
+                 return err;
+             };
++            if (comptime @hasDecl(App, "augmentProjectContext")) try app.augmentProjectContext();
+             if (comptime @hasDecl(App, "writeDomainNotice")) {
+                 for (app.context_snapshot.notices) |notice| {
+                     const should_emit = if (comptime @hasDecl(@TypeOf(app.session), "claimContextNotice"))
+--- a/src/core/app/app_bootstrap_runtime.zig
++++ b/src/core/app/app_bootstrap_runtime.zig
+@@ -1,3 +1,5 @@
++// Modified for Fasthands native Loops shell proof.
++// See vendor/fx/UPSTREAM.json and patches/fx/0001-loops-shell-proof.patch.
+ const std = @import("std");
+ const build_options = @import("build_options");
+ const app_lifecycle = @import("app_lifecycle.zig");
+@@ -455,19 +457,20 @@
+                 startup.credential_load_failure,
+                 startup.credential_onboarding_skipped,
+             );
++            const loops_mode = comptime if (@hasDecl(App, "isLoopsMode")) App.isLoopsMode() else false;
+             // A deferred credential runs the inventory and onboarding steps
+             // when it arrives, so the first frame does not wait for them. An
+             // active credential needs no onboarding, so a fresh launch probes
+             // the other sources after its first frame.
+             const can_defer_inventory = comptime @hasDecl(@TypeOf(app.auth), "deferStartupSourceInventory");
+-            const inventory_deferred = can_defer_inventory and
++            const inventory_deferred = !loops_mode and can_defer_inventory and
+                 !credential_deferred and
+                 app.requested_resume == null and
+                 app.auth.view().active_source != null;
+             if (comptime can_defer_inventory) {
+                 if (inventory_deferred) app.auth.deferStartupSourceInventory();
+             }
+-            if (!credential_deferred and !inventory_deferred) {
++            if (!loops_mode and !credential_deferred and !inventory_deferred) {
+                 if (comptime @hasDecl(@TypeOf(app.auth), "refreshSourceInventory")) {
+                     app.auth.refreshSourceInventory(app.alloc) catch |err| {
+                         debug_trace.logf("auth", "startup source inventory refresh failed err={s}", .{@errorName(err)});
+@@ -513,6 +516,11 @@
+                 );
+             }
+ 
++            // fh's local installation selection must seed the durable session,
++            // not replace runtime fields only after upstream preferences persist.
++            if (loops_mode) {
++                if (comptime @hasDecl(App, "prepareFhStartupSelection")) try app.prepareFhStartupSelection(&startup);
++            }
+             var selected_model = startup.takeSelectedModel();
+             defer if (selected_model.len > 0) app.alloc.free(selected_model);
+             if (comptime @hasField(App, "provider_selection")) {
+@@ -1282,7 +1290,7 @@
+     try std.testing.expectEqualStrings("title", events[5]);
+     try std.testing.expectEqual(@as(usize, 1), capture.begin_calls);
+     try std.testing.expectEqual(@as(usize, 1), capture.enable_calls);
+-    try std.testing.expectEqualStrings("fx v" ++ build_options.app_version ++ " | workspace", capture.titleText());
++    try std.testing.expectEqualStrings("fh v" ++ build_options.app_version ++ " | workspace", capture.titleText());
+ 
+     try std.testing.expectEqualStrings("/workspace", app.workspace_root);
+     try std.testing.expectEqualStrings("api-key", app.auth.apiKey().?);
+--- a/src/core/app/app_entry_runtime.zig
++++ b/src/core/app/app_entry_runtime.zig
+@@ -1,3 +1,5 @@
++// Modified for Fasthands native Loops shell proof.
++// See vendor/fx/UPSTREAM.json and patches/fx/0001-loops-shell-proof.patch.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const app_process_runtime = @import("app_process_runtime.zig");
+@@ -227,6 +229,7 @@
+ 
+ fn runInteractiveWithDeps(comptime App: type, comptime cooperative: bool, app: *App, alloc: Allocator, launch: *cli_surface.InteractiveLaunch, auth_mode: credentials.AuthMode, deps: RunDeps) !RunOutcome {
+     const resume_requested = launch.requested_resume != null;
++    const loops_mode = comptime if (@hasDecl(App, "isLoopsMode")) App.isLoopsMode() else false;
+     app.* = App.init(alloc, launch, auth_mode) catch |err| {
+         switch (err) {
+             error.NotATerminal => {
+@@ -303,7 +306,7 @@
+         }
+     };
+     if (comptime !cooperative) {
+-        if (@hasDecl(App, "startMcpDiscovery")) app.startMcpDiscovery();
++        if (!loops_mode and @hasDecl(App, "startMcpDiscovery")) app.startMcpDiscovery();
+         if (@hasDecl(App, "rebindAfterInit")) app.rebindAfterInit();
+     }
+     var app_needs_deinit = true;
+@@ -316,12 +319,12 @@
+             if (shutdown.failure) |err| reportShutdownFailure(deps, err);
+         }
+     };
+-    if (comptime !cooperative and @hasField(App, "session") and
++    if (comptime !cooperative and !loops_mode and @hasField(App, "session") and
+         @hasDecl(@TypeOf(app.session), "attachProfileUsagePublisher"))
+     {
+         app.session.attachProfileUsagePublisher(app.alloc);
+     }
+-    if (comptime !cooperative) {
++    if (comptime !cooperative and !loops_mode) {
+         if (resume_requested) app.startResumedSessionReconciliation();
+         if (@hasDecl(App, "configureNotifications")) try app.configureNotifications();
+         if (@hasDecl(App, "playStartupSound")) app.playStartupSound();
+@@ -463,13 +466,13 @@
+     var buffer: [768]u8 = undefined;
+     const message = std.fmt.bufPrint(
+         &buffer,
+-        "fx: upgrade installed, but relaunch failed: {s}\nContinue session with: fx {s}--resume {s}\n",
+-        .{ @errorName(err), if (sessions_v2) "--sessions-v2 " else "", session_id },
++        "fx: upgrade installed, but relaunch failed: {s}\n{s}, then continue with: /resume {s}\n",
++        .{ @errorName(err), if (sessions_v2) "Run FX_SESSIONS_V2=1 fh" else "Open fh", session_id },
+     ) catch "fx: upgrade installed, but relaunch failed; run `fx doctor`.\n";
+     writeStderr(deps, message);
+ }
+ 
+-fn cliSurfaceConfig(cfg: Config) cli_surface.Config {
++pub fn cliSurfaceConfig(cfg: Config) cli_surface.Config {
+     return .{
+         .version = cfg.version,
+         .revision = cfg.revision,
+@@ -538,8 +541,8 @@
+ fn formatResumeHandoff(buffer: []u8, session_id: []const u8, sessions_v2: bool) ![]const u8 {
+     return std.fmt.bufPrint(
+         buffer,
+-        "Continue session with: fx {s}--resume {s}\n",
+-        .{ if (sessions_v2) "--sessions-v2 " else "", session_id },
++        "{s}, then continue with: /resume {s}\n",
++        .{ if (sessions_v2) "Run FX_SESSIONS_V2=1 fh" else "Open fh", session_id },
+     );
+ }
+ 
+@@ -551,7 +554,7 @@
+ /// for any other error.
+ fn v2StorageFaultMessage(err: anyerror) ?[]const u8 {
+     return switch (err) {
+-        error.AccessDenied => "fx: this session cannot be opened for writing: permission denied. Check the permissions under ~/.fx/sessions/v2, then resume again.\n",
++        error.AccessDenied => "fx: this session cannot be opened for writing: permission denied. Check the permissions in your profile session directory, then resume again.\n",
+         error.ReadOnlyFileSystem => "fx: this session cannot be opened for writing: the disk is read-only.\n",
+         error.NoSpaceLeft => "fx: this session cannot be saved: the disk is full. Free some space, then resume again.\n",
+         error.FileTooBig => "fx: this session cannot be saved: a file-size limit was reached.\n",
+@@ -1013,7 +1016,7 @@
+ 
+     try std.testing.expectEqual(RunOutcome.returned, outcome);
+     try std.testing.expectEqualStrings(
+-        "Continue session with: fx --resume session-123\n",
++        "Open fh, then continue with: /resume session-123\n",
+         capture.stdout.written(),
+     );
+     try std.testing.expectEqual(@as(usize, 1), capture.stdout_calls);
+@@ -1054,7 +1057,7 @@
+ 
+     try std.testing.expectEqual(RunOutcome.returned, outcome);
+     try std.testing.expectEqualStrings(
+-        "Continue session with: fx --resume session-123\n",
++        "Open fh, then continue with: /resume session-123\n",
+         capture.stdout.written(),
+     );
+     try std.testing.expectEqual(@as(usize, 0), test_sigint_count.load(.seq_cst));
+@@ -1063,7 +1066,7 @@
+     try std.testing.expectEqual(@as(usize, 1), test_sigint_count.load(.seq_cst));
+ }
+ 
+-test "a v2 handoff relaunches and hints with --sessions-v2" {
++test "fh v2 handoff preserves relaunch flag and environment resume hint" {
+     const alloc = std.testing.allocator;
+     var capture = TestCapture.init(.{ .interactive = .{} });
+     defer capture.deinit();
+@@ -1080,7 +1083,7 @@
+     try std.testing.expectEqualStrings("resume", capture.replaceArg(2));
+     try std.testing.expectEqualStrings("session-123", capture.replaceArg(3));
+     try std.testing.expectEqualStrings("--upgrade-relaunch", capture.replaceArg(4));
+-    try std.testing.expect(std.mem.find(u8, capture.stderr.written(), "fx --sessions-v2 --resume session-123") != null);
++    try std.testing.expect(std.mem.find(u8, capture.stderr.written(), "Run FX_SESSIONS_V2=1 fh, then continue with: /resume session-123") != null);
+ }
+ 
+ test "app entry relaunches only after teardown with the validated handoff" {
+@@ -1114,7 +1117,7 @@
+     try std.testing.expect(std.mem.find(
+         u8,
+         capture.stderr.written(),
+-        "fx --resume session-123",
++        "/resume session-123",
+     ) != null);
+     try expectEvents(&.{
+         "init:none",
+@@ -1433,7 +1436,7 @@
+         init_error: anyerror,
+         message: []const u8,
+     }{
+-        .{ .init_error = error.AccessDenied, .message = "fx: this session cannot be opened for writing: permission denied. Check the permissions under ~/.fx/sessions/v2, then resume again.\n" },
++        .{ .init_error = error.AccessDenied, .message = "fx: this session cannot be opened for writing: permission denied. Check the permissions in your profile session directory, then resume again.\n" },
+         .{ .init_error = error.ReadOnlyFileSystem, .message = "fx: this session cannot be opened for writing: the disk is read-only.\n" },
+         .{ .init_error = error.NoSpaceLeft, .message = "fx: this session cannot be saved: the disk is full. Free some space, then resume again.\n" },
+         .{ .init_error = error.FileTooBig, .message = "fx: this session cannot be saved: a file-size limit was reached.\n" },
+--- a/src/core/app/app_input_runtime.zig
++++ b/src/core/app/app_input_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const file_picker_path = @import("../input/file_picker_path.zig");
+ const question_prompt = @import("../agent/question_prompt.zig");
+@@ -608,6 +609,9 @@
+             max_prompt_history: usize,
+         ) !?u8 {
+             if (!ingress.has_routing_work()) return null;
++            if (comptime @hasDecl(App, "preemptStartupForTerminalIngress")) {
++                try app.preemptStartupForTerminalIngress(ingress);
++            }
+             if (terminalIngressCancelsPendingFullTranscriptOpen(ingress)) {
+                 _ = full_transcript_rt.cancelPendingOpenForInput(app);
+             }
+--- a/src/core/app/app_render_runtime.zig
++++ b/src/core/app/app_render_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const question_prompt = @import("../agent/question_prompt.zig");
+ const input_completion_runtime = @import("input_completion_runtime.zig");
+@@ -650,13 +651,14 @@
+             const inline_completion =
+                 input_completion_runtime.CompletionRuntime(App).visibleInlineCompletion(app);
+ 
+-            const visible_model = pending_model orelse provider_runtime.model(app);
++            const loops_display = if (comptime @hasDecl(App, "loopsFooter")) app.loopsFooter() else null;
++            const visible_model = if (loops_display) |display| display.model else pending_model orelse provider_runtime.model(app);
+             const visible_capabilities = model_capabilities.resolveForApp(App, app, visible_model);
+             const active_capabilities_pending = pending_model == null and app.isModelCacheLoading();
+             const model_supports_fast = visible_capabilities.supports_fast_mode;
+-            const model_supports_effort = visible_capabilities.reasoning_efforts.len > 0 or
++            const model_supports_effort = loops_display != null or visible_capabilities.reasoning_efforts.len > 0 or
+                 (active_capabilities_pending and !app.effort.isDefault());
+-            const visible_effort = if (pending_model != null and model_supports_effort)
++            const visible_effort = if (loops_display) |display| types.ReasoningEffort.parse(display.reasoning) orelse .auto else if (pending_model != null and model_supports_effort)
+                 pendingPickerEffort(app, visible_model, model_query, app.input_runtime.picker.model_picker_effort_index)
+             else if (active_capabilities_pending or model_capabilities.reasoningEffortSupported(visible_capabilities, app.effort))
+                 app.effort
+@@ -666,7 +668,7 @@
+                 app.fastModeModelBound()
+             else
+                 true;
+-            const fast_indicator_active = if (pending_model != null)
++            const fast_indicator_active = if (loops_display) |display| display.fast else if (pending_model != null)
+                 visible_capabilities.intrinsic_fast or
+                     (model_supports_fast and pendingPickerFastMode(model_query, app.input_runtime.picker.model_picker_fast_index))
+             else
+--- a/src/core/app/app_session_runtime.zig
++++ b/src/core/app/app_session_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const worker_runtime = @import("../agent/worker_runtime.zig");
+ const agent_runtime = @import("../agent/agent_runtime.zig");
+@@ -3619,11 +3620,11 @@
+             else
+                 "";
+             const folder = if (basename.len == 0) "workspace" else basename;
+-            const prefix = "fx v" ++ build_options.app_version ++ " | ";
++            const prefix = "fh v" ++ build_options.app_version ++ " | ";
+             var label_buffer: [prefix.len + std.fs.max_path_bytes]u8 = undefined;
+             const label = std.fmt.bufPrint(&label_buffer, "{s}{s}", .{ prefix, folder }) catch |err| {
+                 debug_trace.logf("session", "terminal title workspace omitted err={s}", .{@errorName(err)});
+-                provider.set("fx v" ++ build_options.app_version);
++                provider.set("fh v" ++ build_options.app_version);
+                 return;
+             };
+             provider.set(label);
+@@ -12693,11 +12694,11 @@
+ 
+     try std.testing.expectEqualStrings("", app.terminalTitleLabelText());
+     Runtime(TestApp).syncTerminalTitle(&app);
+-    try std.testing.expectEqualStrings("fx v" ++ build_options.app_version ++ " | workspace", app.terminalTitleLabelText());
++    try std.testing.expectEqualStrings("fh v" ++ build_options.app_version ++ " | workspace", app.terminalTitleLabelText());
+ 
+     try app.selected_model.appendSlice(alloc, "zai/glm-5.2");
+     Runtime(TestApp).syncTerminalTitle(&app);
+-    try std.testing.expectEqualStrings("fx v" ++ build_options.app_version ++ " | workspace", app.terminalTitleLabelText());
++    try std.testing.expectEqualStrings("fh v" ++ build_options.app_version ++ " | workspace", app.terminalTitleLabelText());
+ 
+     try app.session.appendHistoryEntry(alloc, .{ .assistant = .{
+         .user = .{ .text = @constCast("wire the release notes generator") },
+@@ -12718,7 +12719,7 @@
+ 
+     Runtime(TestApp).clearCachedSessionTitle(&app);
+     try std.testing.expect(Runtime(TestApp).cachedSessionTitle(&app) == null);
+-    try std.testing.expectEqualStrings("fx v" ++ build_options.app_version ++ " | workspace", app.terminalTitleLabelText());
++    try std.testing.expectEqualStrings("fh v" ++ build_options.app_version ++ " | workspace", app.terminalTitleLabelText());
+ }
+ 
+ test "cached session title drops control bytes before they reach the terminal" {
+@@ -12756,7 +12757,7 @@
+         defer app.deinit();
+         Runtime(TestApp).syncTerminalTitle(&app);
+         var expected_buffer: [128]u8 = undefined;
+-        const expected = try std.fmt.bufPrint(&expected_buffer, "fx v{s} | {s}", .{ build_options.app_version, case.folder });
++        const expected = try std.fmt.bufPrint(&expected_buffer, "fh v{s} | {s}", .{ build_options.app_version, case.folder });
+         try std.testing.expectEqualStrings(expected, app.terminalTitleLabelText());
+     }
+ }
+--- a/src/core/app/input_interrupt_runtime.zig
++++ b/src/core/app/input_interrupt_runtime.zig
+@@ -1,3 +1,5 @@
++// Modified for Fasthands native Loops shell proof.
++// See vendor/fx/UPSTREAM.json and patches/fx/0001-loops-shell-proof.patch.
+ const std = @import("std");
+ const debug_trace = @import("../shared/debug_trace.zig");
+ const worker_runtime = @import("../agent/worker_runtime.zig");
+@@ -65,6 +67,9 @@
+         }
+ 
+         pub fn cancelActiveOperation(app: *App) !void {
++            if (comptime @hasDecl(App, "cancelLoopsOperation")) {
++                if (try App.cancelLoopsOperation(app)) return;
++            }
+             if (comptime @hasField(App, "auth")) {
+                 if (comptime @hasDecl(@TypeOf(app.auth), "cancelProviderPreparation")) {
+                     if (app.auth.cancelProviderPreparation()) {
+--- a/src/core/app/input_submit_runtime.zig
++++ b/src/core/app/input_submit_runtime.zig
+@@ -1,3 +1,5 @@
++// Modified for Fasthands native Loops shell proof.
++// See vendor/fx/UPSTREAM.json and patches/fx/0001-loops-shell-proof.patch.
+ const std = @import("std");
+ const paste_blocks = @import("../input/pasted_blocks.zig");
+ const registered_entities = @import("../input/registered_entities.zig");
+--- a/src/core/app/provider_runtime.zig
++++ b/src/core/app/provider_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const model_provider = @import("../config/model_provider.zig");
+@@ -16,6 +17,7 @@
+     /// Process-long pooled HTTP client for gateway chat traffic. Heap-allocated
+     /// so the pointer stays stable when this Runtime is copied by value; null
+     /// when allocation failed (requests then dial per attempt, as before).
++    codex_http_scope: ?*http_pool.Scope = null,
+     gateway_http_pool: ?*http_pool.HttpPool = null,
+ 
+     pub fn init(alloc: Allocator) Self {
+@@ -31,7 +33,18 @@
+         self.gateway_http_pool = pool;
+     }
+ 
++    pub fn ensureCodexHttpScope(self: *Self) void {
++        if (self.codex_http_scope != null) return;
++        const scope = self.alloc.create(http_pool.Scope) catch return;
++        scope.* = http_pool.Scope.init(self.alloc);
++        self.codex_http_scope = scope;
++    }
++
+     pub fn deinit(self: *Self) void {
++        if (self.codex_http_scope) |scope| {
++            scope.deinit();
++            self.alloc.destroy(scope);
++        }
+         if (self.gateway_http_pool) |pool| {
+             if (pool.deinit() == .destroyed) self.alloc.destroy(pool);
+         }
+--- a/src/core/auth/chatgpt_session.zig
++++ b/src/core/auth/chatgpt_session.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const debug_trace = @import("../shared/debug_trace.zig");
+ const host_target = @import("../hosts/target.zig");
+@@ -92,25 +93,15 @@
+ pub fn load(alloc: Allocator) !?Session {
+     if (comptime host_target.is_wasm) return null;
+     const home = io_mod.getenv("HOME") orelse return null;
+-    var home_dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch |err| {
+-        debug_trace.logf("auth", "ChatGPT session load failed step=open_home err={s}", .{@errorName(err)});
+-        if (err == error.FileNotFound) return null;
+-        return session_presence.storageError(auth_file_name, err);
+-    };
+-    defer home_dir.close(io_mod.getIo());
+-
+-    var fx_dir = home_dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+-        .iterate = true,
+-        .follow_symlinks = false,
+-    }) catch |err| {
++    var fx_dir = profile_paths.openCredentialRoot(home, false) catch |err| {
+         if (err != error.FileNotFound) {
+             debug_trace.logf("auth", "ChatGPT session load failed step=open_profile err={s}", .{@errorName(err)});
+         }
+         if (err == error.FileNotFound) return null;
+         return session_presence.storageError(auth_file_name, err);
+     };
+-    defer fx_dir.close(io_mod.getIo());
+-    return loadFromDir(alloc, &fx_dir);
++    defer fx_dir.close();
++    return loadFromDir(alloc, &fx_dir.dir);
+ }
+ 
+ fn loadFromDir(alloc: Allocator, fx_dir: *std.Io.Dir) !?Session {
+@@ -155,12 +146,7 @@
+ pub fn beginExistingMutation() !?Mutation {
+     if (comptime host_target.is_wasm) return null;
+     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+-    var home_dir = io_mod.VerifiedDir{
+-        .dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch |err| return session_presence.storageError(auth_file_name, err),
+-    };
+-    defer home_dir.close();
+-
+-    const fx_dir = openExistingPrivateFxDir(&home_dir) catch |err| switch (err) {
++    const fx_dir = openExistingPrivateFxDir(home) catch |err| switch (err) {
+         error.FileNotFound => return null,
+         else => return session_presence.storageError(auth_file_name, err),
+     };
+@@ -169,12 +155,7 @@
+ 
+ fn beginMutation() !Mutation {
+     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+-    var home_dir = io_mod.VerifiedDir{
+-        .dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch |err| return session_presence.storageError(auth_file_name, err),
+-    };
+-    defer home_dir.close();
+-
+-    const fx_dir = try io_mod.openOrCreateVerifiedPrivateDir(&home_dir, profile_paths.root_dir_name);
++    const fx_dir = try profile_paths.openCredentialRoot(home, true);
+     return lockMutation(fx_dir);
+ }
+ 
+@@ -190,11 +171,8 @@
+     return .{ .fx_dir = fx_dir, .lock = lock };
+ }
+ 
+-fn openExistingPrivateFxDir(home_dir: *io_mod.VerifiedDir) !io_mod.VerifiedDir {
+-    var dir = try home_dir.dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+-        .iterate = true,
+-        .follow_symlinks = false,
+-    });
++fn openExistingPrivateFxDir(home: []const u8) !io_mod.VerifiedDir {
++    var dir = (try profile_paths.openCredentialRoot(home, false)).dir;
+     errdefer dir.close(io_mod.getIo());
+ 
+     const initial_stat = try dir.stat(io_mod.getIo());
+--- a/src/core/auth/credentials.zig
++++ b/src/core/auth/credentials.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const chatgpt_oauth = @import("chatgpt_oauth.zig");
+@@ -387,7 +388,9 @@
+         const definition = registry.get(bound.label()).?;
+         return switch (definition.auth) {
+             .none => .{ .credential = .{ .token = try alloc.dupe(u8, ""), .source = .configured } },
+-            .bearer => |env| .{ .credential = try loadEnvCredential(alloc, env, .configured) },
++            .bearer => |env| if (comptime @hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell)
++                .{ .credential = if (try @import("../../../../../native/credentials.zig").load(alloc, env)) |token| .{ .token = token, .source = .configured } else null }
++            else .{ .credential = try loadEnvCredential(alloc, env, .configured) },
+         };
+     }
+     if (provider != .gateway) {
+--- a/src/core/auth/grok_session.zig
++++ b/src/core/auth/grok_session.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const debug_trace = @import("../shared/debug_trace.zig");
+ const host_target = @import("../hosts/target.zig");
+@@ -95,25 +96,15 @@
+ pub fn load(alloc: Allocator) !?Session {
+     if (comptime host_target.is_wasm) return null;
+     const home = io_mod.getenv("HOME") orelse return null;
+-    var home_dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch |err| {
+-        debug_trace.logf("auth", "Grok session load failed step=open_home err={s}", .{@errorName(err)});
+-        if (err == error.FileNotFound) return null;
+-        return session_presence.storageError(auth_file_name, err);
+-    };
+-    defer home_dir.close(io_mod.getIo());
+-
+-    var fx_dir = home_dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+-        .iterate = true,
+-        .follow_symlinks = false,
+-    }) catch |err| {
++    var fx_dir = profile_paths.openCredentialRoot(home, false) catch |err| {
+         if (err != error.FileNotFound) {
+             debug_trace.logf("auth", "Grok session load failed step=open_profile err={s}", .{@errorName(err)});
+         }
+         if (err == error.FileNotFound) return null;
+         return session_presence.storageError(auth_file_name, err);
+     };
+-    defer fx_dir.close(io_mod.getIo());
+-    return loadFromDir(alloc, &fx_dir);
++    defer fx_dir.close();
++    return loadFromDir(alloc, &fx_dir.dir);
+ }
+ 
+ fn loadFromDir(alloc: Allocator, fx_dir: *std.Io.Dir) !?Session {
+@@ -158,12 +149,7 @@
+ pub fn beginExistingMutation() !?Mutation {
+     if (comptime host_target.is_wasm) return null;
+     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+-    var home_dir = io_mod.VerifiedDir{
+-        .dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch |err| return session_presence.storageError(auth_file_name, err),
+-    };
+-    defer home_dir.close();
+-
+-    const fx_dir = openExistingPrivateFxDir(&home_dir) catch |err| switch (err) {
++    const fx_dir = openExistingPrivateFxDir(home) catch |err| switch (err) {
+         error.FileNotFound => return null,
+         else => return session_presence.storageError(auth_file_name, err),
+     };
+@@ -172,12 +158,7 @@
+ 
+ fn beginMutation() !Mutation {
+     const home = io_mod.getenv("HOME") orelse return error.HomeNotSet;
+-    var home_dir = io_mod.VerifiedDir{
+-        .dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch |err| return session_presence.storageError(auth_file_name, err),
+-    };
+-    defer home_dir.close();
+-
+-    const fx_dir = try io_mod.openOrCreateVerifiedPrivateDir(&home_dir, profile_paths.root_dir_name);
++    const fx_dir = try profile_paths.openCredentialRoot(home, true);
+     return lockMutation(fx_dir);
+ }
+ 
+@@ -193,11 +174,8 @@
+     return .{ .fx_dir = fx_dir, .lock = lock };
+ }
+ 
+-fn openExistingPrivateFxDir(home_dir: *io_mod.VerifiedDir) !io_mod.VerifiedDir {
+-    var dir = try home_dir.dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+-        .iterate = true,
+-        .follow_symlinks = false,
+-    });
++fn openExistingPrivateFxDir(home: []const u8) !io_mod.VerifiedDir {
++    var dir = (try profile_paths.openCredentialRoot(home, false)).dir;
+     errdefer dir.close(io_mod.getIo());
+ 
+     const initial_stat = try dir.stat(io_mod.getIo());
+--- a/src/core/auth/session_presence.zig
++++ b/src/core/auth/session_presence.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const host = @import("../hosts/host.zig");
+ const host_target = @import("../hosts/target.zig");
+@@ -17,20 +18,20 @@
+ pub fn requireWritableProfileFile(file_name: []const u8, lock_name: []const u8) error{CredentialStorageUnavailable}!bool {
+     if (comptime host_target.is_wasm) return false;
+     const home = io_mod.getenv("HOME") orelse return error.CredentialStorageUnavailable;
+-    var home_dir = std.Io.Dir.openDirAbsolute(io_mod.getIo(), home, .{ .iterate = true }) catch return error.CredentialStorageUnavailable;
+-    defer home_dir.close(io_mod.getIo());
+-    var profile_dir = home_dir.openDir(io_mod.getIo(), profile_paths.root_dir_name, .{
+-        .iterate = true,
+-        .follow_symlinks = false,
+-    }) catch |err| {
++    var profile_dir = profile_paths.openCredentialRoot(home, false) catch |err| {
+         if (err != error.FileNotFound) return error.CredentialStorageUnavailable;
+-        const stat = home_dir.stat(io_mod.getIo()) catch return error.CredentialStorageUnavailable;
++        const alloc = std.heap.c_allocator;
++        const root = profile_paths.rootDir(alloc, home) catch return error.CredentialStorageUnavailable;
++        defer alloc.free(root);
++        var parent = io_mod.openDirAbsoluteNoFollow(std.fs.path.dirname(root) orelse return error.CredentialStorageUnavailable, .{}) catch return error.CredentialStorageUnavailable;
++        defer parent.close(io_mod.getIo());
++        const stat = parent.stat(io_mod.getIo()) catch return error.CredentialStorageUnavailable;
+         if (stat.permissions.toMode() & 0o200 == 0) return error.CredentialStorageUnavailable;
+         return false;
+     };
+-    defer profile_dir.close(io_mod.getIo());
+-    const exists = try requireWritableInDir(profile_dir, file_name);
+-    _ = try requireWritableInDir(profile_dir, lock_name);
++    defer profile_dir.close();
++    const exists = try requireWritableInDir(profile_dir.dir, file_name);
++    _ = try requireWritableInDir(profile_dir.dir, lock_name);
+     return exists;
+ }
+ 
+@@ -65,21 +66,9 @@
+     max_bytes: usize,
+ ) host.SecretStorePresence {
+     const home = home_value orelse return .unavailable;
+-    var home_dir = std.Io.Dir.openDirAbsolute(
+-        io_mod.getIo(),
+-        home,
+-        .{ .iterate = true },
+-    ) catch |err| return if (err == error.FileNotFound) .missing else .unavailable;
+-    defer home_dir.close(io_mod.getIo());
+-
+-    var profile_dir = home_dir.openDir(
+-        io_mod.getIo(),
+-        profile_paths.root_dir_name,
+-        .{ .iterate = true, .follow_symlinks = false },
+-    ) catch |err| return if (err == error.FileNotFound) .missing else .unavailable;
+-    defer profile_dir.close(io_mod.getIo());
+-
+-    var file = profile_dir.openFile(io_mod.getIo(), file_name, .{
++    var profile_dir = profile_paths.openCredentialRoot(home, false) catch |err| return if (err == error.FileNotFound) .missing else .unavailable;
++    defer profile_dir.close();
++    var file = profile_dir.dir.openFile(io_mod.getIo(), file_name, .{
+         .mode = .read_only,
+         .allow_directory = false,
+         .follow_symlinks = false,
+--- a/src/core/cli/cli_surface.zig
++++ b/src/core/cli/cli_surface.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const io_mod = @import("../shared/io.zig");
+@@ -206,6 +207,7 @@
+ const version_usage = "usage: fx --version\n";
+ 
+ pub const Config = struct {
++    inspect_decision_status: ?*const fn (Allocator) anyerror!output_contracts.DecisionStatus = null,
+     version: []const u8 = "",
+     revision: []const u8 = "",
+     build_channel: update_target.Channel = .stable,
+@@ -265,6 +267,37 @@
+         }
+     }
+     return if (entries.len > 0) entries[0].id else null;
++}
++
++fn selectActivationCatalogModel(
++    entries: []const model_catalog.ModelCatalogEntry,
++    settings: *const config_runtime.Settings,
++    target: model_provider.ProviderId,
++    default_model: []const u8,
++) ?[]const u8 {
++    var preferred = settings.models.get(target);
++    const fh_defaults = @hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell;
++    if (fh_defaults and target == .codex and preferred == null) {
++        if (config_runtime.selectProviderModel(default_model, settings, target, null)) |selected| {
++            preferred = selected.model;
++        } else |_| {}
++    }
++    return selectCatalogModel(entries, preferred);
++}
++
++test "fh native provider activation prefers compiled Luna over catalog order" {
++    if (!(@hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell)) return;
++    const ids = [_][]const u8{ "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.4", "gpt-5.4-mini", "gpt-5.6-luna" };
++    var catalog: [ids.len]model_catalog.ModelCatalogEntry = undefined;
++    for (&catalog, ids) |*entry, id| entry.* = .{ .id = @constCast(id), .model_type = @constCast("language") };
++    var settings: config_runtime.Settings = .{ .provider = .codex };
++    defer settings.deinit(std.testing.allocator);
++    try std.testing.expectEqualStrings("gpt-6-luna", selectActivationCatalogModel(&catalog, &settings, .codex, "gateway/default").?);
++    try settings.models.putCopy(std.testing.allocator, .codex, "gpt-6.1-sol");
++    try std.testing.expectEqualStrings("gpt-6.1-sol", selectActivationCatalogModel(&catalog, &settings, .codex, "gateway/default").?);
++    try std.testing.expectEqualStrings("gpt-6.1-sol", selectActivationCatalogModel(&catalog, &settings, .grok, "gateway/default").?);
++    try std.testing.expectEqualStrings("gpt-6.1-sol", selectCatalogModel(&catalog, null).?);
++    try std.testing.expect(selectActivationCatalogModel(&.{}, &settings, .codex, "gateway/default") == null);
+ }
+ 
+ const UpgradeOptions = struct {
+@@ -1004,8 +1037,7 @@
+         },
+     };
+     defer model_catalog.freeModelCatalog(alloc, &loaded.catalog);
+-    const saved_model = settings.models.get(target);
+-    const selected_model = selectCatalogModel(loaded.catalog.items, saved_model) orelse {
++    const selected_model = selectActivationCatalogModel(loaded.catalog.items, &settings, target, cfg.default_model) orelse {
+         try writeProviderActivationError(alloc, deps, caller, "target model catalog is empty");
+         return false;
+     };
+@@ -1386,6 +1418,9 @@
+             }, mcp_inspection.profile_diagnostic);
+             snapshot.mcp = localMcpView(&mcp_inspection);
+             snapshot.provider_endpoint = startup.provider_endpoint;
++            var decision_arena = std.heap.ArenaAllocator.init(alloc);
++            defer decision_arena.deinit();
++            if (cfg.inspect_decision_status) |inspect| snapshot.jev = try inspect(decision_arena.allocator());
+             if (opts.format == .json) {
+                 try writeStatusJsonLine(alloc, deps, snapshot);
+                 return .handled_success;
+@@ -2086,6 +2121,11 @@
+         std.c.isatty(std.posix.STDERR_FILENO) != 0;
+ }
+ 
++/// Reuse fx's bounded, masked terminal reader for named fh credentials.
++pub fn readMaskedKey(alloc: Allocator) ![]u8 {
++    return readMaskedKeyDefault(null, alloc, writeRealStderr, null);
++}
++
+ fn readMaskedKeyDefault(
+     _: ?*anyopaque,
+     alloc: Allocator,
+@@ -6349,3 +6389,35 @@
+ fn ownedCreditsErrorSnapshot(alloc: Allocator, message: []const u8) output_contracts.CreditsSnapshot {
+     return .{ .err_message = alloc.dupe(u8, message) catch null };
+ }
++
++test "fh status adds Jev readiness in one JSON object and text with existing fields" {
++    const Fixture = struct {
++        fn inspect(_: Allocator) !output_contracts.DecisionStatus {
++            return .{ .model = "fixture-jev", .api_key_env = "CUSTOM_JEV_KEY", .credential_presence = .present, .credential_source = .saved };
++        }
++    };
++    for ([_]bool{ true, false }) |json| {
++        var capture = CaptureOutput.init(std.testing.allocator);
++        defer capture.deinit();
++        var deps = capture.deps();
++        deps.load_startup_status = stubLoadStartupStatus;
++        var cfg = testConfig();
++        cfg.inspect_decision_status = Fixture.inspect;
++        const args: []const [:0]const u8 = if (json) &.{ "status", "--json" } else &.{"status"};
++        const result = try runIfRequestedWithDeps(std.testing.allocator, args, cfg, deps);
++        try std.testing.expectEqual(RunResult.handled_success, result);
++        const output = capture.stdout.written();
++        try std.testing.expect(std.mem.find(u8, output, "fixture-jev") != null);
++        try std.testing.expect(std.mem.find(u8, output, "CUSTOM_JEV_KEY") != null);
++        try std.testing.expect(std.mem.find(u8, output, "not_checked") != null);
++        try std.testing.expect(std.mem.find(u8, output, "test-model") != null);
++        if (json) {
++            const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, output, .{});
++            defer parsed.deinit();
++            const jev = parsed.value.object.get("jev").?.object;
++            try std.testing.expectEqualStrings("present", jev.get("credential_presence").?.string);
++            try std.testing.expectEqualStrings("saved", jev.get("credential_source").?.string);
++            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, output, "\n"));
++        }
++    }
++}
+--- a/src/core/config/config_runtime.zig
++++ b/src/core/config/config_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const agent_steps = @import("agent_steps.zig");
+ const debug_trace = @import("../shared/debug_trace.zig");
+@@ -326,16 +327,34 @@
+     provider_override: ?model_provider.ProviderId,
+     run_model: ?[]const u8,
+ ) ModelSelectionError!model_provider.ProviderSelection {
+-    const provider = provider_override orelse settings.provider orelse .gateway;
++    const fh_defaults = @hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell;
++    const provider = provider_override orelse settings.provider orelse if (fh_defaults) .codex else .gateway;
+     const model = settings.models.get(provider) orelse switch (provider) {
+         .gateway => default_model,
+-        .codex => run_model orelse return error.CodexModelNotSelected,
++        .codex => run_model orelse if (fh_defaults) "gpt-6-luna" else return error.CodexModelNotSelected,
+         .grok => run_model orelse return error.GrokModelNotSelected,
+         .configured => run_model orelse return error.ConfiguredModelNotSelected,
+     };
+     return .{ .provider = provider, .model = model };
+ }
+ 
++test "fh native defaults bind Codex before auth while explicit provider models win" {
++    const empty = Settings{};
++    const selected = try selectProviderModel("legacy/gateway", &empty, null, null);
++    try std.testing.expectEqual(model_provider.ProviderId.codex, selected.provider);
++    try std.testing.expectEqualStrings("gpt-6-luna", selected.model);
++    const activated = Settings{ .provider = .codex };
++    try std.testing.expectEqualStrings("gpt-6-luna", (try selectProviderModel("legacy/gateway", &activated, null, null)).model);
++    try std.testing.expectEqualStrings("gpt-6-luna", (try selectProviderModel("legacy/gateway", &empty, .codex, null)).model);
++    var explicit = Settings{ .provider = .codex };
++    defer explicit.deinit(std.testing.allocator);
++    try explicit.models.putCopy(std.testing.allocator, .codex, "explicit-model");
++    try std.testing.expectEqualStrings("explicit-model", (try selectProviderModel("legacy/gateway", &explicit, null, null)).model);
++    const overridden = try selectProviderModel("legacy/gateway", &empty, .grok, "explicit-grok");
++    try std.testing.expectEqual(model_provider.ProviderId.grok, overridden.provider);
++    try std.testing.expectEqualStrings("explicit-grok", overridden.model);
++}
++
+ /// User-facing guidance for a `ModelSelectionError`, or null for any other error.
+ pub fn modelNotSelectedMessage(err: anyerror) ?[]const u8 {
+     const for_this_run = "or set a model for this run with --model or FX_MODEL";
+--- a/src/core/config/settings_store.zig
++++ b/src/core/config/settings_store.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const debug_trace = @import("../shared/debug_trace.zig");
+ const io_mod = @import("../shared/io.zig");
+@@ -93,6 +94,8 @@
+ };
+ 
+ pub const UserSettingsPatch = struct {
++    /// fh setup uses the existing locked commit path for one non-secret route.
++    configured_provider: ?struct { id: []const u8, definition: std.json.Value } = null,
+     model_preference: ?ModelPreferencePatch = null,
+     provider: ?model_provider.ProviderId = null,
+     permission_mode: ?types.PermissionMode = null,
+@@ -116,7 +119,7 @@
+     notification_max: ?bool = null,
+ 
+     fn isEmpty(self: UserSettingsPatch) bool {
+-        return self.model_preference == null and
++        return self.configured_provider == null and self.model_preference == null and
+             self.provider == null and
+             self.permission_mode == null and
+             self.credential_source == null and
+@@ -348,7 +351,14 @@
+         };
+         defer home.close(zio);
+ 
+-        var durable_home = home.openDir(zio, profile_paths.root_dir_name, .{
++        var durable_home = if (comptime @hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell) (profile_paths.openCredentialRoot(home_path, mode == .writable) catch |err| switch (err) {
++            error.FileNotFound => {
++                if (mode == .read_only) return initReadOnlyAbsent(alloc, home_path);
++                return err;
++            },
++            error.NotDir, error.SymLinkLoop => return error.DurablePathUnsafe,
++            else => return err,
++        }).dir else home.openDir(zio, profile_paths.root_dir_name, .{
+             .iterate = true,
+             .follow_symlinks = false,
+         }) catch |err| switch (err) {
+@@ -919,6 +929,14 @@
+ 
+ fn validateUserPatch(patch: UserSettingsPatch) !void {
+     if (patch.model_preference) |preference| try validateModel(preference.model);
++    if (patch.configured_provider) |route| {
++        var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
++        defer arena.deinit();
++        var routes: std.json.Value = .{ .object = .empty };
++        try routes.object.put(arena.allocator(), route.id, route.definition);
++        var registry = try @import("configured_provider.zig").Registry.parse(arena.allocator(), routes);
++        defer registry.deinit(arena.allocator());
++    }
+ }
+ 
+ fn validAdditionalDirectoryPath(path: []const u8) bool {
+@@ -1047,6 +1065,16 @@
+     patch: UserSettingsPatch,
+ ) !PatchApplication {
+     var application = PatchApplication{};
++    if (patch.configured_provider) |route| {
++        if (!root.object.contains("providers")) try root.object.put(arena, "providers", .{ .object = .empty });
++        const routes = root.object.getPtr("providers").?;
++        if (routes.* != .object) return error.InvalidSettingsFormat;
++        // Copy into the commit arena: the caller's parsed form may disappear.
++        const bytes = try std.json.Stringify.valueAlloc(arena, route.definition, .{});
++        const owned = try std.json.parseFromSliceLeaky(std.json.Value, arena, bytes, .{ .allocate = .alloc_always });
++        try routes.object.put(arena, try arena.dupe(u8, route.id), owned);
++        application.changed = true;
++    }
+     if (patch.model_preference) |preference| {
+         application.changed = try putModelPreference(arena, &root.object, preference) or application.changed;
+     }
+--- a/src/core/hosts/native_keychain.zig
++++ b/src/core/hosts/native_keychain.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const debug_trace = @import("../shared/debug_trace.zig");
+@@ -148,8 +149,27 @@
+ 
+ pub fn load(alloc: std.mem.Allocator) !?[]u8 {
+     return loadFromService(alloc, service_name);
++}
++
++/// Named credentials share the existing account and Keychain implementation.
++pub fn loadNamed(alloc: std.mem.Allocator, service: []const u8) !?[]u8 {
++    if (comptime builtin.os.tag == .macos) return loadMcpValueMac(alloc, service);
++    return null;
++}
++
++pub fn presenceNamed(service: []const u8) Error!host.SecretStorePresence {
++    return containsService(service);
+ }
+ 
++pub fn storeNamed(service: []const u8, value: []const u8) Error!void {
++    if (!isAvailable()) return error.UnsupportedPlatform;
++    if (value.len == 0) return error.KeychainWriteFailed;
++    // API keys can exceed security's 128-byte interactive password buffer.
++    // Reuse fx's existing bounded native Security API store, as OAuth/MCP do.
++    if (comptime builtin.os.tag == .macos) return storeMcpValueMac(service, value);
++    return error.UnsupportedPlatform;
++}
++
+ /// Checks Keychain metadata only. It never asks Security.framework for the
+ /// secret value and never spawns the `security` command-line tool.
+ pub fn contains() Error!host.SecretStorePresence {
+--- a/src/core/hosts/native_secret_store.zig
++++ b/src/core/hosts/native_secret_store.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const debug_trace = @import("../shared/debug_trace.zig");
+@@ -17,6 +18,8 @@
+ 
+ const LoadError = host.SecretStoreLoadError;
+ const StoreError = host.SecretStoreWriteError;
++const loops_shell = @hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell;
++const named_credentials = if (loops_shell) @import("../../../../../native/credentials.zig") else void;
+ 
+ pub const provider: host.SecretStore = .{
+     .backend_label = backend_label,
+@@ -35,12 +38,24 @@
+ /// Returns the stored key, or null when no key is stored. An error means the store
+ /// could not be read, which callers must keep distinct from absence.
+ fn load(alloc: Allocator) LoadError!?[]u8 {
++    if (comptime loops_shell) {
++        const saved = named_credentials.loadSaved(alloc, "AI_GATEWAY_API_KEY") catch |err| return switch (err) {
++            error.OutOfMemory => error.OutOfMemory,
++            error.StoredKeyInsecure => error.StoredKeyInsecure,
++            else => error.StoredKeyUnreadable,
++        };
++        if (saved != null or io_mod.getenv("FH_DATA_DIR") != null) return saved;
++    }
+     if (comptime builtin.os.tag == .macos) return loadFromKeychain(alloc);
+     return loadFromProfile(alloc);
+ }
+ 
+ fn store(alloc: Allocator, value: []const u8) StoreError!void {
+     if (value.len == 0) return error.StoredKeyWriteFailed;
++    if (comptime loops_shell) return named_credentials.save(alloc, "AI_GATEWAY_API_KEY", value) catch |err| switch (err) {
++        error.OutOfMemory => error.OutOfMemory,
++        else => error.StoredKeyWriteFailed,
++    };
+     if (comptime builtin.os.tag == .macos) {
+         keychain.storeValue(value) catch |err| return writeFailed("keychain", err);
+         return;
+@@ -51,6 +66,7 @@
+ /// Let the platform credential store own terminal input when it supports a
+ /// secure prompt, keeping plaintext out of the fx process.
+ fn storeInteractive() StoreError!bool {
++    if (comptime loops_shell) return false;
+     if (comptime builtin.os.tag == .macos) {
+         keychain.storeInteractive() catch |err| return writeFailed("keychain_interactive", err);
+         return true;
+@@ -64,6 +80,10 @@
+ 
+ fn presenceCallback(_: ?*anyopaque) host.SecretStorePresence {
+     if (isDisabled()) return .missing;
++    if (comptime loops_shell) {
++        const saved = named_credentials.presenceSaved(std.heap.c_allocator, "AI_GATEWAY_API_KEY") catch return .unavailable;
++        if (saved != .missing or io_mod.getenv("FH_DATA_DIR") != null) return saved;
++    }
+     if (comptime builtin.os.tag == .macos) {
+         return keychain.contains() catch .unavailable;
+     }
+--- a/src/core/output/output_contracts.zig
++++ b/src/core/output/output_contracts.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const auth_runtime = @import("../auth/auth_runtime.zig");
+ const credentials = @import("../auth/credentials.zig");
+@@ -464,9 +465,20 @@
+         }
+         try writer.writeByte('}');
+     }
++};
++
++/// Local credential metadata only; access has not been checked with the provider.
++pub const DecisionStatus = struct {
++    provider: ?[]const u8 = "typesafe",
++    model: ?[]const u8 = "jev-1.13.0",
++    api_key_env: ?[]const u8 = "TYPESAFE_API_KEY",
++    credential_presence: enum { missing, present, unknown } = .unknown,
++    credential_source: enum { none, environment, saved, unknown } = .unknown,
++    access: []const u8 = "not_checked",
+ };
+ 
+ pub const StatusSnapshot = struct {
++    jev: ?DecisionStatus = null,
+     model: []const u8,
+     /// Where startup found `model`: FX_MODEL, settings, or default.
+     model_origin: ?[]const u8 = null,
+@@ -500,6 +512,10 @@
+         defer out.deinit();
+ 
+         try out.writer.print("[status] model={s}\n", .{self.model});
++        if (self.jev) |jev| {
++            try out.writer.print("[status] jev_provider={s} jev_model={s}\n", .{ jev.provider orelse "unknown", jev.model orelse "unknown" });
++            try out.writer.print("[status] jev_credential={s} source={s} api_key_env={s} access={s}\n", .{ @tagName(jev.credential_presence), @tagName(jev.credential_source), jev.api_key_env orelse "unknown", jev.access });
++        }
+         if (self.model_origin) |origin| try out.writer.print("[status] model_origin={s}\n", .{origin});
+         if (self.provider != .gateway) {
+             try out.writer.print("[status] model_source={s}\n", .{providerDisplayName(&self.provider)});
+@@ -615,6 +631,10 @@
+             try writer.writeAll(",\"provider_endpoint\":");
+             try std.json.Stringify.value(endpoint, .{}, writer);
+         }
++        if (self.jev) |jev| {
++            try writer.writeAll(",\"jev\":");
++            try std.json.Stringify.value(jev, .{}, writer);
++        }
+         try writer.writeAll(",\"update_channel\":");
+         try std.json.Stringify.value(self.update_channel, .{}, writer);
+         try writer.writeAll(",\"build_channel\":");
+--- a/src/core/session/session_log.zig
++++ b/src/core/session/session_log.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const debug_trace = @import("../shared/debug_trace.zig");
+@@ -3954,9 +3955,14 @@
+ 
+     pub fn initFromHome(
+         alloc: Allocator,
+-        home_path: []const u8,
++        requested_home: []const u8,
+         mode: OpenMode,
+     ) !Root {
++        const profile_root = try profile_paths.rootDir(alloc, requested_home);
++        defer alloc.free(profile_root);
++        const home_path = std.fs.path.dirname(profile_root) orelse return error.SessionPathUnsafe;
++        const profile_name = std.fs.path.basename(profile_root);
++        if (profile_name.len == 0) return error.SessionPathUnsafe;
+         const zio = io_mod.getIo();
+         var home = std.Io.Dir.openDirAbsolute(zio, home_path, .{ .iterate = true }) catch |err| switch (err) {
+             error.FileNotFound => blk: {
+@@ -3965,7 +3971,7 @@
+                         .sessions = null,
+                         .display_root = try std.fs.path.join(
+                             alloc,
+-                            &.{ home_path, profile_paths.root_dir_name, profile_paths.sessions_dir_name },
++                            &.{ home_path, profile_name, profile_paths.sessions_dir_name },
+                         ),
+                         .mode = mode,
+                     };
+@@ -3980,7 +3986,7 @@
+         };
+         defer home.close(zio);
+ 
+-        var durable_home = home.openDir(zio, profile_paths.root_dir_name, .{
++        var durable_home = home.openDir(zio, profile_name, .{
+             .iterate = true,
+             .follow_symlinks = false,
+         }) catch |err| switch (err) {
+@@ -3990,7 +3996,7 @@
+                         .sessions = null,
+                         .display_root = try std.fs.path.join(
+                             alloc,
+-                            &.{ home_path, profile_paths.root_dir_name, profile_paths.sessions_dir_name },
++                            &.{ home_path, profile_name, profile_paths.sessions_dir_name },
+                         ),
+                         .mode = mode,
+                     };
+@@ -4003,7 +4009,7 @@
+                 defer verified_home.close();
+                 const created = try io_mod.openOrCreateVerifiedPrivateDir(
+                     &verified_home,
+-                    profile_paths.root_dir_name,
++                    profile_name,
+                 );
+                 break :blk created.dir;
+             },
+@@ -4027,7 +4033,7 @@
+                         .sessions = null,
+                         .display_root = try std.fs.path.join(
+                             alloc,
+-                            &.{ home_path, profile_paths.root_dir_name, profile_paths.sessions_dir_name },
++                            &.{ home_path, profile_name, profile_paths.sessions_dir_name },
+                         ),
+                         .mode = mode,
+                     };
+--- a/src/core/session/session_store.zig
++++ b/src/core/session/session_store.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const config_runtime = @import("../config/config_runtime.zig");
+@@ -426,11 +427,9 @@
+     home_path: []const u8,
+ ) !?io_mod.VerifiedDir {
+     const zio = io_mod.getIo();
+-    var home = try std.Io.Dir.openDirAbsolute(zio, home_path, .{
+-        .iterate = true,
+-    });
+-    defer home.close(zio);
+-    var profile = home.openDir(zio, profile_paths.root_dir_name, .{
++    const profile_root = try profile_paths.rootDir(std.heap.page_allocator, home_path);
++    defer std.heap.page_allocator.free(profile_root);
++    var profile = std.Io.Dir.openDirAbsolute(zio, profile_root, .{
+         .iterate = true,
+         .follow_symlinks = false,
+     }) catch |err| switch (err) {
+@@ -636,12 +635,9 @@
+ 
+     fn openRememberedDirectory(self: Store, create: bool) !?io_mod.VerifiedDir {
+         const zio = io_mod.getIo();
+-        var home = std.Io.Dir.openDirAbsolute(zio, self.home_dir, .{ .iterate = true }) catch |err| switch (err) {
+-            error.FileNotFound => return null,
+-            else => return err,
+-        };
+-        defer home.close(zio);
+-        var profile = home.openDir(zio, profile_paths.root_dir_name, .{
++        const profile_root = try profile_paths.rootDir(std.heap.page_allocator, self.home_dir);
++        defer std.heap.page_allocator.free(profile_root);
++        var profile = std.Io.Dir.openDirAbsolute(zio, profile_root, .{
+             .iterate = true,
+             .follow_symlinks = false,
+         }) catch |err| switch (err) {
+--- a/src/core/shared/http_pool.zig
++++ b/src/core/shared/http_pool.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const debug_trace = @import("debug_trace.zig");
+@@ -8,7 +9,7 @@
+ /// release, and thread safety; this wrapper owns the three product concerns
+ /// std does not: client lifetime, launch warming, and idle staleness.
+ ///
+-/// Ownership: created once per process by the provider runtime, borrowed by
++/// Ownership: created by a session/run owner or provider runtime, borrowed by
+ /// request paths. All methods are safe to call from concurrent request
+ /// threads (the underlying std pool is internally mutex-guarded).
+ const default_ttl_ms: i64 = 30_000;
+@@ -26,37 +27,26 @@
+     last_activity_ms: std.atomic.Value(i64) = .init(0),
+     warm_started: std.atomic.Value(bool) = .init(false),
+     warm_done: std.atomic.Value(bool) = .init(false),
++    warm_stop: std.atomic.Value(bool) = .init(false),
++    warm_thread: ?std.Thread = null,
+     deinitialized: bool = false,
+ 
+     pub const DestroyDisposition = enum {
+         /// Pool resources released; caller may free the HttpPool itself.
+         destroyed,
+-        /// A warm flight is still inside connect and owns the client. The
+-        /// pool is intentionally leaked; only reachable while a process is
+-        /// exiting or abandoning state, so the memory dies with the process.
+-        abandoned_warm_flight,
+     };
+ 
+     pub fn init(alloc: std.mem.Allocator) HttpPool {
+         return .{ .client = .{ .allocator = alloc, .io = io_mod.getIo() } };
+     }
+ 
+-    /// Tears the pool down. When a warm flight is still inside connect, waits
+-    /// briefly for it, then abandons rather than freeing memory the thread is
+-    /// using (only reachable on process-abandon paths).
++    /// The owner joins the bounded warm flight before releasing its client.
+     pub fn deinit(self: *HttpPool) DestroyDisposition {
+         if (self.deinitialized) return .destroyed;
+         self.deinitialized = true;
+-        if (self.warm_started.load(.acquire) and !self.warm_done.load(.acquire)) {
+-            var waited_ms: u64 = 0;
+-            while (!self.warm_done.load(.acquire) and waited_ms < 500) : (waited_ms += 10) {
+-                io_mod.sleep(10 * std.time.ns_per_ms);
+-            }
+-            if (!self.warm_done.load(.acquire)) {
+-                debug_trace.logf("gateway", "pool_deinit result=abandoned_warm_flight", .{});
+-                return .abandoned_warm_flight;
+-            }
+-        }
++        self.warm_stop.store(true, .release);
++        if (self.warm_thread) |thread| thread.join();
++        self.warm_thread = null;
+         self.client.deinit();
+         return .destroyed;
+     }
+@@ -122,25 +112,46 @@
+         std.mem.swap(std.crypto.Certificate.Bundle, &client.ca_bundle, &bundle);
+     }
+ 
+-    /// Spawns the warmer on a detached thread, at most once per pool.
+-    /// `url` must remain valid for the process lifetime (string literals and
+-    /// environment-variable storage both qualify). Test builds never spawn;
+-    /// call warm() synchronously to exercise the logic.
++    /// Best-effort connection-only warmup. Own the URL and join on teardown;
++    /// the cancellable I/O race bounds DNS/TCP/TLS work without a generation.
+     pub fn warmAsync(self: *HttpPool, url: []const u8) void {
+         if (comptime builtin.is_test) return;
++        self.startWarm(url);
++    }
++
++    fn startWarm(self: *HttpPool, url: []const u8) void {
+         if (self.warm_started.swap(true, .acq_rel)) return;
+-        const thread = std.Thread.spawn(.{}, warmThreadMain, .{ self, url }) catch {
++        const owned = self.client.allocator.dupe(u8, url) catch {
+             self.warm_started.store(false, .release);
+             return;
+         };
+-        thread.detach();
++        self.warm_thread = std.Thread.spawn(.{}, warmThreadMain, .{ self, owned }) catch {
++            self.client.allocator.free(owned);
++            self.warm_started.store(false, .release);
++            return;
++        };
+     }
+ 
+-    fn warmThreadMain(self: *HttpPool, url: []const u8) void {
++    fn warmThreadMain(self: *HttpPool, url: []u8) void {
++        defer self.client.allocator.free(url);
+         defer self.warm_done.store(true, .release);
+-        self.warm(url);
++        const Event = union(enum) { warm: void, stop: anyerror!void };
++        var buffer: [2]Event = undefined;
++        var select: std.Io.Select(Event) = .init(io_mod.getIo(), &buffer);
++        defer select.cancelDiscard();
++        select.concurrent(.stop, waitForWarmStop, .{self}) catch return;
++        select.concurrent(.warm, warm, .{ self, url }) catch return;
++        _ = select.await() catch return;
+     }
+ 
++    fn waitForWarmStop(self: *HttpPool) !void {
++        const deadline = std.Io.Clock.Timestamp.fromNow(io_mod.getIo(), .{ .clock = .awake, .raw = .fromMilliseconds(500) });
++        while (!self.warm_stop.load(.acquire)) {
++            if (!std.Io.Clock.Timestamp.compare(.now(io_mod.getIo(), .awake), .lt, deadline)) return;
++            try io_mod.getIo().sleep(.fromMilliseconds(5), .awake);
++        }
++    }
++
+     /// Returns the shared client after applying the idle-staleness policy for
+     /// this origin. Call once per request, before opening.
+     pub fn clientFor(self: *HttpPool, url: []const u8) *std.http.Client {
+@@ -190,6 +201,68 @@
+     }
+ };
+ 
++/// One chat session or actual Loop run owns this scope. Only transport state
++/// persists: each caller retains its own headers, body, callbacks and secrets.
++/// The private digest includes the endpoint, credential source/value, account
++/// and conversation identity. A concurrent borrower falls back to a local
++/// client instead of rotating or destroying a client another request uses.
++pub const Scope = struct {
++    alloc: std.mem.Allocator,
++    pool: ?HttpPool = null,
++    identity: ?[32]u8 = null,
++    origin: ?[32]u8 = null,
++    busy: std.atomic.Value(bool) = .init(false),
++
++    pub fn init(alloc: std.mem.Allocator) Scope {
++        return .{ .alloc = alloc };
++    }
++
++    pub fn deinit(self: *Scope) void {
++        std.debug.assert(!self.busy.load(.acquire));
++        if (self.pool) |*pool| _ = pool.deinit();
++        self.pool = null;
++    }
++
++    fn digest(fields: []const []const u8) [32]u8 {
++        var hash = std.crypto.hash.sha2.Sha256.init(.{});
++        for (fields) |field| {
++            const len: u64 = field.len;
++            hash.update(std.mem.asBytes(&len));
++            hash.update(field);
++        }
++        return hash.finalResult();
++    }
++
++    pub fn acquire(self: *Scope, url: []const u8, fields: []const []const u8) ?*HttpPool {
++        if (self.busy.swap(true, .acq_rel)) return null;
++        const origin = digest(&.{url});
++        const identity = digest(fields);
++        if (self.pool != null and ((self.origin != null and !std.mem.eql(u8, &self.origin.?, &origin)) or
++            (self.identity != null and !std.mem.eql(u8, &self.identity.?, &identity))))
++        {
++            _ = self.pool.?.deinit();
++            self.pool = null;
++        }
++        if (self.pool == null) self.pool = HttpPool.init(self.alloc);
++        self.origin = origin;
++        self.identity = identity;
++        return &self.pool.?;
++    }
++
++    pub fn release(self: *Scope) void {
++        self.busy.store(false, .release);
++    }
++
++    pub fn warmAsync(self: *Scope, url: []const u8) void {
++        if (self.busy.swap(true, .acq_rel)) return;
++        defer self.release();
++        if (self.pool != null) return;
++        self.pool = HttpPool.init(self.alloc);
++        self.origin = digest(&.{url});
++        self.pool.?.warmAsync(url);
++    }
++};
++
+ test "warm and drain tolerate malformed urls without touching the pool" {
+     var pool = HttpPool.init(std.testing.allocator);
+     defer _ = pool.deinit();
+@@ -238,3 +311,43 @@
+     _ = pool.clientFor(url);
+     try std.testing.expectEqual(@as(usize, 0), pool.freeConnectionCount());
+ }
++
++test "fh pooled warmup performs no request and joins stalled TLS on deadline or cancellation" {
++    const Fixture = @import("../../../../../native/loops/transport_fixture.zig");
++    const alloc = std.testing.allocator;
++    for ([_]bool{ false, true }) |cancel| {
++        var server = try Fixture.Server.init(&.{.{ .body = "{}" }});
++        defer server.deinit();
++        try server.start();
++        const url = try std.fmt.allocPrint(alloc, "https://127.0.0.1:{d}/responses", .{server.listener.socket.address.getPort()});
++        defer alloc.free(url);
++        var pool = HttpPool.init(alloc);
++        defer _ = pool.deinit();
++        const start = std.Io.Clock.awake.now(io_mod.getIo()).toMilliseconds();
++        pool.startWarm(url);
++        while (server.accepted.load(.acquire) == 0 and !pool.warm_done.load(.acquire)) {
++            try std.testing.expect(std.Io.Clock.awake.now(io_mod.getIo()).toMilliseconds() - start < 1500);
++            io_mod.sleep(std.time.ns_per_ms);
++        }
++        if (!cancel) while (!pool.warm_done.load(.acquire)) {
++            try std.testing.expect(std.Io.Clock.awake.now(io_mod.getIo()).toMilliseconds() - start < 1500);
++            io_mod.sleep(std.time.ns_per_ms);
++        };
++        _ = pool.deinit();
++        try std.testing.expect(pool.warm_thread == null);
++        try std.testing.expect(pool.warm_done.load(.acquire));
++        try std.testing.expectEqual(@as(usize, 0), server.served.load(.acquire));
++        try std.testing.expect(std.Io.Clock.awake.now(io_mod.getIo()).toMilliseconds() - start < 1500);
++    }
++    var server = try Fixture.Server.init(&.{.{ .body = "{}" }});
++    defer server.deinit();
++    try server.start();
++    const url = try server.url(alloc);
++    defer alloc.free(url);
++    var pool = HttpPool.init(alloc);
++    defer _ = pool.deinit();
++    pool.startWarm(url);
++    while (!pool.warm_done.load(.acquire)) io_mod.sleep(std.time.ns_per_ms);
++    try std.testing.expectEqual(@as(usize, 1), pool.freeConnectionCount());
++    try std.testing.expectEqual(@as(usize, 0), server.served.load(.acquire));
++}
+--- a/src/core/shared/profile_paths.zig
++++ b/src/core/shared/profile_paths.zig
+@@ -1,8 +1,10 @@
++// Modified for Fasthands native Loops shell proof.
++// See vendor/fx/UPSTREAM.json and patches/fx/0001-loops-shell-proof.patch.
+ const std = @import("std");
+ 
+ const Allocator = std.mem.Allocator;
+ 
+-pub const root_dir_name = ".fx";
++pub const root_dir_name = if (@hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell) ".fh" else ".fx";
+ pub const auth_file_name = "auth.json";
+ pub const chatgpt_auth_file_name = "chatgpt-auth.json";
+ pub const grok_auth_file_name = "grok-auth.json";
+@@ -27,76 +29,105 @@
+ const trace_log_file_name = "trace.log";
+ const recordings_dir_name = "recordings";
+ 
++fn joinProfile(alloc: Allocator, home: []const u8, suffix: []const []const u8) ![]u8 {
++    if (comptime @hasDecl(@import("build_options"), "loops_shell") and @import("build_options").loops_shell) {
++        if (std.c.getenv("FH_DATA_DIR")) |path| {
++            const root = std.mem.span(path);
++            var parts: std.ArrayList([]const u8) = .empty;
++            defer parts.deinit(alloc);
++            try parts.append(alloc, root);
++            try parts.appendSlice(alloc, suffix);
++            return std.fs.path.join(alloc, parts.items);
++        }
++    }
++    var parts: std.ArrayList([]const u8) = .empty;
++    defer parts.deinit(alloc);
++    try parts.appendSlice(alloc, &.{ home, root_dir_name });
++    try parts.appendSlice(alloc, suffix);
++    return std.fs.path.join(alloc, parts.items);
++}
++
+ pub fn rootDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name });
++    return joinProfile(alloc, home, &.{});
+ }
+ 
++/// Credential storage follows the same isolated profile as sessions/settings.
++pub fn openCredentialRoot(home: []const u8, create: bool) !@import("io.zig").VerifiedDir {
++    const io_mod = @import("io.zig");
++    const alloc = std.heap.c_allocator;
++    const root = try rootDir(alloc, home);
++    defer alloc.free(root);
++    if (!create) return .{ .dir = try io_mod.openDirAbsoluteNoFollow(root, .{ .iterate = true }) };
++    const parent_path = std.fs.path.dirname(root) orelse return error.InvalidProfilePath;
++    var parent: io_mod.VerifiedDir = .{ .dir = try io_mod.openDirAbsoluteNoFollow(parent_path, .{ .iterate = true }) };
++    defer parent.close();
++    return io_mod.openOrCreateVerifiedPrivateDir(&parent, std.fs.path.basename(root));
++}
++
+ pub fn settingsPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, settings_file_name });
++    return joinProfile(alloc, home, &.{settings_file_name});
+ }
+ 
+ pub fn mcpConfigPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, mcp_config_file_name });
++    return joinProfile(alloc, home, &.{mcp_config_file_name});
+ }
+ 
+ pub fn mcpCredentialsDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, mcp_credentials_dir_name });
++    return joinProfile(alloc, home, &.{mcp_credentials_dir_name});
+ }
+ 
+ pub fn mcpCredentialsPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{
+-        home,
+-        root_dir_name,
++    return joinProfile(alloc, home, &.{
+         mcp_credentials_dir_name,
+         mcp_credentials_file_name,
+     });
+ }
+ 
+ pub fn managedSkillsDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, managed_skills_dir_name });
++    return joinProfile(alloc, home, &.{managed_skills_dir_name});
+ }
+ 
+ pub fn authPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, auth_file_name });
++    return joinProfile(alloc, home, &.{auth_file_name});
+ }
+ 
+ pub fn chatgptAuthPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, chatgpt_auth_file_name });
++    return joinProfile(alloc, home, &.{chatgpt_auth_file_name});
+ }
+ 
+ pub fn apiKeyPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, api_key_file_name });
++    return joinProfile(alloc, home, &.{api_key_file_name});
+ }
+ 
+ pub fn sessionsDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, sessions_dir_name });
++    return joinProfile(alloc, home, &.{sessions_dir_name});
+ }
+ 
+ pub fn promptHistoryPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, prompt_history_file_name });
++    return joinProfile(alloc, home, &.{prompt_history_file_name});
+ }
+ 
+ pub fn backupsDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, backups_dir_name });
++    return joinProfile(alloc, home, &.{backups_dir_name});
+ }
+ 
+ pub fn logsDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, logs_dir_name });
++    return joinProfile(alloc, home, &.{logs_dir_name});
+ }
+ 
+ pub fn traceLogPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, logs_dir_name, trace_log_file_name });
++    return joinProfile(alloc, home, &.{ logs_dir_name, trace_log_file_name });
+ }
+ 
+ pub const diagnostics_dir_name = "diagnostics";
+ pub const last_shutdown_report_file_name = "last-shutdown.json";
+ 
+ pub fn lastShutdownReportPath(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, diagnostics_dir_name, last_shutdown_report_file_name });
++    return joinProfile(alloc, home, &.{ diagnostics_dir_name, last_shutdown_report_file_name });
+ }
+ 
+ pub fn recordingsDir(alloc: Allocator, home: []const u8) ![]u8 {
+-    return std.fs.path.join(alloc, &.{ home, root_dir_name, recordings_dir_name });
++    return joinProfile(alloc, home, &.{recordings_dir_name});
+ }
+ 
+ test "profile path helpers preserve current default locations" {
+--- a/src/core/tooling/tool_runtime.zig
++++ b/src/core/tooling/tool_runtime.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const skill_contract = @import("../skills/skill_contract.zig");
+ const builtin = @import("builtin");
+@@ -389,41 +390,7 @@
+     defer if (!replay_continuation_transferred) {
+         request.command_replay_capture.?.abort(request.result_allocator);
+     };
+-    var execution_ctx = ctx;
+-    execution_ctx.skill_locations = request.skill_locations orelse ctx.skill_locations;
+-    if (request.permission_mode) |permission_mode| {
+-        execution_ctx.permission_mode = permission_mode;
+-    }
+-    if (request.live_authority) |authority| {
+-        if (!containsName(authority.tools, request.call.name) and
+-            !containsName(authority.integrations, request.call.name))
+-        {
+-            return tool_contracts.failToolExecutionResult(
+-                error.LiveToolAuthorityUnavailable,
+-            );
+-        }
+-        execution_ctx.permission_mode = authority.permission_mode;
+-        execution_ctx.permission_grants = authority.grants;
+-        execution_ctx.session_grants = authority.grants;
+-        execution_ctx.permission_rules = authority.rules;
+-        execution_ctx.advertised_dynamic_tool_names = authority.integrations;
+-        execution_ctx.mcp_access = rebindMcpAuthorityGeneration(
+-            execution_ctx.mcp_access,
+-            authority.generation,
+-        );
+-    } else {
+-        execution_ctx.session_grants = request.session_grants;
+-        execution_ctx.advertised_dynamic_tool_names =
+-            request.advertised_dynamic_tool_names;
+-    }
+-    execution_ctx.max_tool_result_bytes = request.max_tool_result_bytes;
+-    execution_ctx.expected_mcp_runtime_generation = request.expected_mcp_runtime_generation;
+-    execution_ctx.expected_mcp_binding = request.expected_mcp_binding;
+-    execution_ctx.current_turn_messages = request.current_turn_messages;
+-    execution_ctx.output_chunk_lifecycle_id = request.lifecycle_id;
+-    execution_ctx.command_timeout_started_ms = request.command_timeout_started_ms;
+-    execution_ctx.command_replay_capture = request.command_replay_capture;
+-    execution_ctx.command_replay_unavailable = request.command_replay_unavailable;
++    const execution_ctx = try authorizedExecutionContext(ctx, request);
+ 
+     const started_at_ms = io_mod.milliTimestamp();
+     const uses_file_mutation_contract = if (registeredToolSpec(
+@@ -602,11 +569,7 @@
+         return error.InvalidToolArguments;
+     if (spec.executor_kind != .host) return error.InvalidToolArguments;
+ 
+-    var execution_ctx = ctx;
+-    if (request.permission_mode) |permission_mode| {
+-        execution_ctx.permission_mode = permission_mode;
+-    }
+-    execution_ctx.max_tool_result_bytes = request.max_tool_result_bytes;
++    const execution_ctx = try authorizedExecutionContext(ctx, request);
+     var dispatch_ctx = typedDispatchContextForCall(
+         execution_ctx,
+         request.result_allocator,
+@@ -619,6 +582,45 @@
+         request.call,
+     );
+     return toolExecutionResultFromDispatch(dispatched, .{});
++}
++
++/// The host and filesystem paths share exactly the same live authority binding.
++pub fn authorizedExecutionContext(ctx: Context, request: tool_contracts.ToolExecutionRequest) !Context {
++    var execution_ctx = ctx;
++    execution_ctx.skill_locations = request.skill_locations orelse ctx.skill_locations;
++    if (request.permission_mode) |permission_mode| {
++        execution_ctx.permission_mode = permission_mode;
++    }
++    if (request.live_authority) |authority| {
++        if (!containsName(authority.tools, request.call.name) and
++            !containsName(authority.integrations, request.call.name))
++        {
++            return error.LiveToolAuthorityUnavailable;
++        }
++        execution_ctx.permission_mode = authority.permission_mode;
++        execution_ctx.permission_grants = authority.grants;
++        execution_ctx.session_grants = authority.grants;
++        execution_ctx.permission_rules = authority.rules;
++        execution_ctx.advertised_dynamic_tool_names = authority.integrations;
++        execution_ctx.mcp_access = rebindMcpAuthorityGeneration(
++            execution_ctx.mcp_access,
++            authority.generation,
++        );
++    } else {
++        execution_ctx.session_grants = request.session_grants;
++        execution_ctx.advertised_dynamic_tool_names =
++            request.advertised_dynamic_tool_names;
++    }
++    execution_ctx.max_tool_result_bytes = request.max_tool_result_bytes;
++    execution_ctx.expected_mcp_runtime_generation = request.expected_mcp_runtime_generation;
++    execution_ctx.expected_mcp_binding = request.expected_mcp_binding;
++    execution_ctx.current_turn_messages = request.current_turn_messages;
++    execution_ctx.output_chunk_lifecycle_id = request.lifecycle_id;
++    execution_ctx.command_timeout_started_ms = request.command_timeout_started_ms;
++    execution_ctx.command_replay_capture = request.command_replay_capture;
++    execution_ctx.command_replay_unavailable = request.command_replay_unavailable;
++
++    return execution_ctx;
+ }
+ 
+ fn rebindMcpAuthorityGeneration(
+@@ -7996,3 +7998,57 @@
+     );
+     try std.testing.expectEqual(@as(usize, 1), fixture.call_count);
+ }
++
++test "fh native prepared write commits and rejects target drift or revoked authority" {
++    const alloc = std.testing.allocator;
++    var tmp = std.testing.tmpDir(.{});
++    defer tmp.cleanup();
++    try tmp.dir.createDirPath(io_mod.getIo(), "workspace");
++    const workspace = try io_mod.dirRealpathAlloc(alloc, tmp.dir, "workspace");
++    defer alloc.free(workspace);
++    var arena_state = std.heap.ArenaAllocator.init(alloc);
++    defer arena_state.deinit();
++    const arena = arena_state.allocator();
++    var result_arena_state = std.heap.ArenaAllocator.init(alloc);
++    defer result_arena_state.deinit();
++    const result_arena = result_arena_state.allocator();
++    var allow_rules = [_]types.PermissionRule{.{ .permission = @constCast("edit"), .pattern = @constCast("**"), .action = .allow }};
++    var rt = TestRuntime{ .workspace_root = workspace, .permission_mode = .auto, .permission_rules = .{ .rules = &allow_rules }, .tool_registry = @import("fh_loop_tools.zig").set.registry };
++    defer rt.deinit(alloc);
++    const host_validation = try validateToolCall(rt.context(), arena, .{ .id = "host-validate", .name = "docs_read", .arguments_json = "{\"document\":\"guide\",\"length\":2048}" });
++    try std.testing.expect(host_validation == .valid);
++    const call: ToolCall = .{ .id = "prepared", .name = "write_file", .arguments_json = "{\"path\":\"saved.py\",\"content\":\"print(1)\\n\"}" };
++    const authorization = switch (try tool_admission.preflightFileMutation(arena, call, .{ .tool_registry = rt.tool_registry, .workspace_root = workspace, .permission_rules = .{ .rules = &allow_rules }, .permission_mode = .auto, .can_prompt = false, .prepare_permission_identity = true })) {
++        .allowed => |value| value,
++        else => return error.TestExpectedAllowed,
++    };
++    try std.testing.expect(authorization.prepared != null);
++    var request: tool_contracts.ToolExecutionRequest = .{ .call_allocator = arena, .result_allocator = result_arena, .call = call, .authority = .{ .file_mutation = authorization }, .session_grants = &.{}, .advertised_dynamic_tool_names = &.{}, .max_tool_result_bytes = 65536 };
++    const applied = try executeToolCallAuthorized(rt.context(), request);
++    try std.testing.expectEqual(tool_contracts.ToolExecutionStatus.success, applied.status);
++    try std.testing.expect(applied.committed_file_handoff != null);
++    const changed_call: ToolCall = .{ .id = "changed", .name = "write_file", .arguments_json = "{\"path\":\"saved.py\",\"content\":\"print(2)\\n\"}" };
++    request.call = changed_call;
++    const fresh_authorization = switch (try tool_admission.preflightFileMutation(arena, changed_call, .{ .tool_registry = rt.tool_registry, .workspace_root = workspace, .permission_rules = .{ .rules = &allow_rules }, .permission_mode = .auto, .can_prompt = false, .prepare_permission_identity = true })) {
++        .allowed => |value| value,
++        else => return error.TestExpectedAllowed,
++    };
++    request.authority = .{ .file_mutation = fresh_authorization };
++    var file = try tmp.dir.createFile(io_mod.getIo(), "workspace/saved.py", .{ .truncate = true });
++    try file.writeStreamingAll(io_mod.getIo(), "external change\n");
++    file.close(io_mod.getIo());
++    const drift = try executeToolCallAuthorized(rt.context(), request);
++    try std.testing.expectEqual(tool_contracts.ToolExecutionStatus.failure, drift.status);
++    try std.testing.expect(drift.failure_kind == .apply or drift.failure_kind == .preflight);
++    try std.testing.expect(std.mem.indexOf(u8, drift.model_output, "changed") != null);
++    var verify_file = try tmp.dir.openFile(io_mod.getIo(), "workspace/saved.py", .{});
++    defer verify_file.close(io_mod.getIo());
++    const contents = try io_mod.readFileToEnd(alloc, &verify_file, 4096);
++    defer alloc.free(contents);
++    try std.testing.expectEqualStrings("external change\n", contents);
++    request.live_authority = .{ .generation = 2, .root_id = "root", .tools = &.{"read_file"}, .integrations = &.{}, .rules = .{}, .grants = &.{} };
++    try std.testing.expectError(error.LiveToolAuthorityUnavailable, executeToolCallAuthorized(rt.context(), request));
++    request.call = .{ .id = "revoked-host", .name = "docs_read", .arguments_json = "{\"document\":\"guide\"}" };
++    request.authority = .ordinary;
++    try std.testing.expectError(error.LiveToolAuthorityUnavailable, executeHostToolCallAuthorized(rt.context(), request));
++}
+--- a/src/gateway/chat_completions_protocol.zig
++++ b/src/gateway/chat_completions_protocol.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const stream_provider = @import("../core/agent/stream_provider.zig");
+ const types = @import("../core/shared/types.zig");
+@@ -995,6 +996,7 @@
+             .completion = .{ .content = content, .tool_calls = owned_calls, .generation_id = generation_id, .finish_reason = reason, .usage = self.usage, .provider_state_json = provider_state },
+             .ownership = .owned,
+             .usage = .{ .unavailable = .possibly_billed },
++            .final_token_usage = if (self.usage_final_fields.input and self.usage_final_fields.output) self.usage else null,
+         } };
+     }
+ };
+@@ -2292,6 +2294,37 @@
+     }
+ }
+ 
++test "fh compatible Loop budgets require final counters without attributing billing" {
++    const alloc = std.testing.allocator;
++    const both = "{\"choices\":[],\"usage\":{\"prompt_tokens\":17,\"completion_tokens\":3,\"total_tokens\":20}}";
++    for ([_]bool{ false, true }) |final| {
++        var reducer = try Reducer.init(alloc, test_request(), .{});
++        defer reducer.deinit();
++        try test_accept(&reducer, test_text);
++        if (!final) try test_accept(&reducer, "{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":17,\"completion_tokens\":3,\"total_tokens\":20}}");
++        try test_accept(&reducer, test_stop);
++        if (final) try test_accept(&reducer, both);
++        try test_accept(&reducer, "[DONE]");
++        var result = try reducer.finish(false);
++        defer result.deinit(alloc);
++        try std.testing.expect(result.completed.usage == .unavailable);
++        try std.testing.expect(result.completed.completion.billing == null);
++        if (final) {
++            const counts = result.completed.final_token_usage.?;
++            try std.testing.expectEqual(@as(?u64, 17), counts.input_tokens);
++            try std.testing.expectEqual(@as(?u64, 3), counts.output_tokens);
++        } else try std.testing.expect(result.completed.final_token_usage == null);
++    }
++    var missing = try Reducer.init(alloc, test_request(), .{});
++    defer missing.deinit();
++    try test_accept(&missing, test_stop);
++    try test_accept(&missing, "{\"choices\":[],\"usage\":{\"prompt_tokens\":17}}");
++    try test_accept(&missing, "[DONE]");
++    var partial = try missing.finish(false);
++    defer partial.deinit(alloc);
++    try std.testing.expect(partial.completed.final_token_usage == null);
++}
++
+ test "chat completions stream framing handles chunks trailers truncation and wire caps" {
+     const alloc = std.testing.allocator;
+     const wire = "data: " ++ test_text ++ "\n\ndata: " ++ test_stop ++ "\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":1}}\n\ndata: [DONE]\n\n";
+--- a/src/gateway/client.zig
++++ b/src/gateway/client.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const build_options = @import("build_options");
+@@ -2220,6 +2221,7 @@
+     client: *std.http.Client,
+     uri: std.Uri,
+     authorization: ?[]const u8,
++    keep_alive: bool = false,
+     extra_headers: []const std.http.Header = &.{},
+ 
+     pub fn run(self: *PostOperation) !OpenedPost {
+@@ -2232,7 +2234,7 @@
+         return .{ .request = try self.client.request(.POST, self.uri, .{
+             .headers = headers,
+             .extra_headers = self.extra_headers,
+-            .keep_alive = false,
++            .keep_alive = self.keep_alive,
+             .redirect_behavior = .unhandled,
+         }) };
+     }
+--- a/src/gateway/openai_codex.zig
++++ b/src/gateway/openai_codex.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const debug_trace = @import("../core/shared/debug_trace.zig");
+ const chatgpt_oauth = @import("../core/auth/chatgpt_oauth.zig");
+@@ -11,6 +12,7 @@
+ const sse_stream = @import("sse.zig");
+ const model_tool_schema = @import("../core/tooling/model_tool_schema.zig");
+ 
++const http_pool = @import("../core/shared/http_pool.zig");
+ const Allocator = std.mem.Allocator;
+ const endpoint = "https://chatgpt.com/backend-api/codex/responses";
+ const e2e_endpoint_env = "FX_E2E_OPENAI_CODEX_RESPONSES_URL";
+@@ -79,11 +81,11 @@
+     try std.json.Stringify.value(request.model, .{}, writer);
+     try writer.writeAll(",\"store\":false,\"stream\":true,\"instructions\":");
+     try std.json.Stringify.value(instructions.written(), .{}, writer);
++    _ = try responses_protocol.writeTools(writer, alloc, request.tools);
+     try writer.writeAll(",\"input\":[");
+     try writeResponsesInput(writer, std.heap.c_allocator, projected orelse request.messages, request.verified_images, budget);
+     try writer.writeByte(']');
+ 
+-    _ = try responses_protocol.writeTools(writer, alloc, request.tools);
+     try writer.writeAll(",\"tool_choice\":");
+     try std.json.Stringify.value(request.tool_choice.label(), .{}, writer);
+     try writer.writeAll(",\"parallel_tool_calls\":true,\"include\":[\"reasoning.encrypted_content\"]");
+@@ -146,7 +148,7 @@
+ }
+ 
+ fn streamCompletion(
+-    _: ?*anyopaque,
++    context: ?*anyopaque,
+     alloc: Allocator,
+     request: stream_provider.ModelRequest,
+ ) !stream_provider.Result {
+@@ -164,6 +166,7 @@
+         .alloc = alloc,
+         .request = request,
+         .payload = payload,
++        .scope = if (context) |raw| @ptrCast(@alignCast(raw)) else null,
+     };
+     return (if (request.deadline) |deadline|
+         gateway_client.runBoundedHttpOperation(
+@@ -185,9 +188,10 @@
+     alloc: Allocator,
+     request: stream_provider.ModelRequest,
+     payload: []const u8,
++    scope: ?*http_pool.Scope,
+ 
+     pub fn run(self: *@This()) !stream_provider.Result {
+-        return streamPrepared(self.alloc, self.request, self.payload);
++        return streamPreparedScoped(self.alloc, self.request, self.payload, self.scope);
+     }
+ };
+ 
+@@ -225,19 +229,28 @@
+ }
+ 
+ pub fn streamPrepared(
++    alloc: Allocator,
++    request: stream_provider.ModelRequest,
++    payload: []const u8,
++) !stream_provider.Result {
++    return streamPreparedScoped(alloc, request, payload, null);
++}
++
++pub fn warmEndpoint() ?[]const u8 {
++    if (io_mod.getenv(e2e_endpoint_env)) |override| return if (gateway_client.isLoopbackHttpUrl(override)) override else null;
++    return endpoint;
++}
++
++fn streamPreparedScoped(
+     alloc: Allocator,
+     request: stream_provider.ModelRequest,
+     payload: []const u8,
++    scope: ?*http_pool.Scope,
+ ) !stream_provider.Result {
+     if (request.cancel_flag.load(.seq_cst)) return stream_provider.failResult(error.Cancelled);
+     var auth_headers = try requestAuthHeaders(alloc, request.credential);
+     defer auth_headers.deinit(alloc);
+-    const request_endpoint = if (io_mod.getenv(e2e_endpoint_env)) |override| endpoint: {
+-        if (!gateway_client.isLoopbackHttpUrl(override)) {
+-            return stream_provider.failResult(error.InvalidE2EOpenAICodexEndpoint);
+-        }
+-        break :endpoint override;
+-    } else endpoint;
++    const request_endpoint = warmEndpoint() orelse return stream_provider.failResult(error.InvalidE2EOpenAICodexEndpoint);
+     const uri = try std.Uri.parse(request_endpoint);
+ 
+     var extra_headers_buf: [7]std.http.Header = undefined;
+@@ -259,10 +272,22 @@
+         extra_count += 1;
+     };
+ 
+-    var client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
+-    defer client.deinit();
++    const pool = if (scope) |owner| owner.acquire(request_endpoint, &.{
++        if (request.credential.credentialSource()) |source| @tagName(source) else "unknown",
++        auth_headers.authorization orelse "",
++        auth_headers.account_id orelse "",
++        switch (request.credential) {
++            .direct => |direct| direct.tenant_context orelse "",
++            .host_managed => "",
++        },
++        request.session_id orelse "",
++    }) else null;
++    defer if (pool != null) scope.?.release();
++    var local_client: std.http.Client = .{ .allocator = alloc, .io = io_mod.getIo() };
++    defer local_client.deinit();
+     var open_operation = gateway_client.PostOperation{
+-        .client = &client,
++        .client = if (pool) |p| p.clientFor(request_endpoint) else &local_client,
++        .keep_alive = pool != null,
+         .uri = uri,
+         .authorization = auth_headers.authorization,
+         .extra_headers = extra_headers_buf[0..extra_count],
+@@ -280,10 +305,14 @@
+     );
+     var http_request = opened.take();
+     defer http_request.deinit();
++    var reusable = false;
++    defer if (!reusable) {
++        if (http_request.connection) |connection| connection.closing = true;
++    };
+     var cancel_watch: gateway_client.CancelWatch = .{};
+     defer cancel_watch.stop();
+     if (http_request.connection) |connection|
+-        try cancel_watch.start(request.cancel_flag, null, connection.stream_writer.stream);
++        try cancel_watch.start(request.cancel_flag, request.deadline, connection.stream_writer.stream);
+     if (request.cancel_flag.load(.seq_cst)) return error.Cancelled;
+ 
+     http_request.transfer_encoding = .{ .content_length = payload.len };
+@@ -331,7 +360,36 @@
+             .ownership = .owned,
+         } };
+         owned.deinit(alloc);
++    }
++    if (pool) |p| {
++        // A terminal SSE event establishes completion, but only HTTP EOF makes
++        // this socket reusable. Never let an unfinished tail block completion.
++        var drain_watch: gateway_client.CancelWatch = .{};
++        defer drain_watch.stop();
++        var drain_deadline = std.Io.Clock.Timestamp.fromNow(io_mod.getIo(), .{ .clock = .awake, .raw = .fromMilliseconds(100) });
++        if (request.deadline) |limit| if (std.Io.Clock.Timestamp.compare(limit, .lt, drain_deadline)) {
++            drain_deadline = limit;
++        };
++        const watched = if (http_request.connection) |connection| watched: {
++            drain_watch.start(request.cancel_flag, drain_deadline, connection.stream_writer.stream) catch break :watched false;
++            break :watched true;
++        } else false;
++        if (watched) {
++            reusable = if (reader.discardRemaining()) |_| true else |_| false;
++            drain_watch.stop();
++            if (reusable) p.noteActivity();
++        }
+     }
++    cancel_watch.stop();
++    if (request.cancel_flag.load(.seq_cst)) {
++        reusable = false;
++        return error.Cancelled;
++    }
++    if (request.deadline) |limit| if (!std.Io.Clock.Timestamp.compare(.now(io_mod.getIo(), .awake), .lt, limit)) {
++        reusable = false;
++        return error.Timeout;
++    };
++    debug_trace.logf("gateway", "native_cache_usage provider=codex input={?d} read={?d} write={?d}", .{ completion.usage.input_tokens, cacheCounter(completion.usage.cache_read_tokens, completion.usage.input_tokens), cacheCounter(completion.usage.cache_write_tokens, completion.usage.input_tokens) });
+     const usage_outcome: stream_provider.UsageOutcome = usage: {
+         if (completion.generation_id == null) {
+             break :usage .{ .unavailable = .possibly_billed };
+@@ -352,6 +410,11 @@
+     } };
+ }
+ 
++fn cacheCounter(value: ?u64, input: ?u64) ?u64 {
++    const count = value orelse return null;
++    return if (count <= (input orelse return null)) count else null;
++}
++
+ const EventBridge = struct {
+     fn sink(raw: *anyopaque) *stream_provider.EventSink {
+         return @ptrCast(@alignCast(raw));
+@@ -870,3 +933,273 @@
+         try std.testing.expectEqual(error.OpenAICodexToolCallLimitExceeded, err);
+     }
+ }
++
++const TransportFixture = @import("../../../../native/loops/transport_fixture.zig");
++const transport_test_body = "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"message\"}}\n\n" ++
++    "data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"ok\"}\n\n" ++
++    "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_fixture\",\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":1,\"input_tokens_details\":{\"cached_tokens\":4,\"cache_write_tokens\":0}}}}\n\n";
++const TransportProbe = struct {
++    cancel: std.atomic.Value(bool) = .init(false),
++    delivery: stream_provider.DeliveryCertainty = .init(),
++    evidence: stream_provider.AttemptEvidence = .{},
++    token: []const u8 = "fixture-one",
++    account: []const u8 = "fixture-account",
++    session: []const u8 = "fixture-session",
++    tenant: []const u8 = "fixture-tenant",
++    timeout_ms: i64 = 2000,
++
++    fn call(self: *@This(), scope: ?*http_pool.Scope) !stream_provider.Result {
++        self.delivery = .init();
++        var provider = agent_stream_provider;
++        provider.context = scope;
++        return provider.stream(std.testing.allocator, .{
++            .credential = .{ .direct = .{ .secret_bytes = self.token, .source = .chatgpt_subscription, .account_id = self.account, .tenant_context = self.tenant } },
++            .model = "gpt-5.6-luna",
++            .retry_count = 1,
++            .instructions = &.{.{ .role = .system, .content = "Stable instructions." }},
++            .messages = &.{.{ .role = .user, .content = "changing input" }},
++            .tool_choice = .none,
++            .provider_options = .{ .reasoning = types.ReasoningEffort.literal("medium"), .fast = true },
++            .trace_ctx = .{},
++            .content_capture_limit = null,
++            .deadline = .fromNow(io_mod.getIo(), .{ .clock = .awake, .raw = .fromMilliseconds(self.timeout_ms) }),
++            .session_id = self.session,
++            .delivery = &self.delivery,
++            .attempt_evidence = &self.evidence,
++            .events = .{ .context = self, .emit_fn = ignore },
++            .admission = .{ .context = self, .admit_fn = admit },
++            .cancel_flag = &self.cancel,
++        });
++    }
++    fn ignore(_: *anyopaque, _: stream_provider.Event) void {}
++    fn admit(_: *anyopaque) !void {}
++    fn success(self: *@This(), scope: ?*http_pool.Scope) !void {
++        var result = try self.call(scope);
++        defer result.deinit(std.testing.allocator);
++        try std.testing.expect(result == .completed);
++        try std.testing.expectEqualStrings("ok", result.completed.completion.content.?);
++        try std.testing.expectEqual(@as(?u64, 4), result.completed.completion.usage.cache_read_tokens);
++        try std.testing.expectEqual(@as(?u64, 0), result.completed.completion.usage.cache_write_tokens);
++    }
++};
++
++test "fh Codex pooled requests reuse actual socket and keep headers local across identity rotations" {
++    const alloc = std.testing.allocator;
++    const replies = [_]TransportFixture.Reply{.{ .body = transport_test_body }} ** 9;
++    var server = try TransportFixture.Server.init(&replies);
++    defer server.deinit();
++    try server.start();
++    const url = try server.url(alloc);
++    defer alloc.free(url);
++    const env = try TransportFixture.Env.init(e2e_endpoint_env, url);
++    defer env.deinit();
++    var scope = http_pool.Scope.init(alloc);
++    defer scope.deinit();
++    var probe: TransportProbe = .{};
++    try probe.success(&scope);
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 1), server.accepted.load(.acquire));
++    probe.token = "fixture-two";
++    try probe.success(&scope);
++    probe.account = "other-account";
++    try probe.success(&scope);
++    probe.session = "other-session";
++    try probe.success(&scope);
++    probe.tenant = "other-tenant";
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 5), server.accepted.load(.acquire));
++    try std.testing.expectEqualStrings("Bearer fixture-one", server.header(0, "authorization").?);
++    try std.testing.expectEqualStrings("Bearer fixture-two", server.header(2, "authorization").?);
++    try std.testing.expectEqualStrings("other-account", server.header(3, "chatgpt-account-id").?);
++    try std.testing.expectEqualStrings("other-session", server.header(4, "session-id").?);
++    try std.testing.expectEqualStrings(server.bodies[0][0..server.body_lens[0]], server.bodies[1][0..server.body_lens[1]]);
++    // End this owner before the fallback and new-run requests.
++    scope.deinit();
++    try probe.success(null);
++    try probe.success(null);
++    var other_scope = http_pool.Scope.init(alloc);
++    defer other_scope.deinit();
++    try probe.success(&other_scope);
++    try std.testing.expectEqual(@as(usize, 8), server.accepted.load(.acquire));
++}
++
++test "fh Codex endpoint change redials and concurrent lease falls back without rotating active pool" {
++    const alloc = std.testing.allocator;
++    const replies = [_]TransportFixture.Reply{.{ .body = transport_test_body }} ** 2;
++    var first = try TransportFixture.Server.init(&replies);
++    defer first.deinit();
++    try first.start();
++    var second = try TransportFixture.Server.init(&replies);
++    defer second.deinit();
++    try second.start();
++    const url1 = try first.url(alloc);
++    defer alloc.free(url1);
++    const url2 = try second.url(alloc);
++    defer alloc.free(url2);
++    const env = try TransportFixture.Env.init(e2e_endpoint_env, url1);
++    defer env.deinit();
++    var scope = http_pool.Scope.init(alloc);
++    defer scope.deinit();
++    var probe: TransportProbe = .{};
++    try probe.success(&scope);
++    const changed = try TransportFixture.Env.init(e2e_endpoint_env, url2);
++    defer changed.deinit();
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 1), first.accepted.load(.acquire));
++    try std.testing.expectEqual(@as(usize, 1), second.accepted.load(.acquire));
++    // Hold a lease while a differing request runs. It must use its own client.
++    _ = scope.acquire(url2, &.{"held"}).?;
++    defer scope.release();
++    try probe.success(&scope);
++    try std.testing.expect(scope.busy.load(.acquire));
++    try std.testing.expectEqual(@as(usize, 2), second.accepted.load(.acquire));
++}
++
++test "fh Codex delayed tail drains for reuse and endless tail closes within bounded time" {
++    const alloc = std.testing.allocator;
++    const replies = [_]TransportFixture.Reply{
++        .{ .body = transport_test_body, .mode = .delayed_tail },
++        .{ .body = transport_test_body, .mode = .endless_tail },
++        .{ .body = transport_test_body },
++    };
++    var server = try TransportFixture.Server.init(&replies);
++    defer server.deinit();
++    try server.start();
++    const url = try server.url(alloc);
++    defer alloc.free(url);
++    const env = try TransportFixture.Env.init(e2e_endpoint_env, url);
++    defer env.deinit();
++    var scope = http_pool.Scope.init(alloc);
++    defer scope.deinit();
++    var probe: TransportProbe = .{};
++    try probe.success(&scope);
++    const start = std.Io.Clock.awake.now(io_mod.getIo()).toMilliseconds();
++    try probe.success(&scope);
++    const elapsed = std.Io.Clock.awake.now(io_mod.getIo()).toMilliseconds() - start;
++    try std.testing.expect(elapsed < 1000);
++    try std.testing.expectEqual(@as(usize, 1), server.accepted.load(.acquire));
++    try std.testing.expectEqual(@as(usize, 0), scope.pool.?.freeConnectionCount());
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 2), server.accepted.load(.acquire));
++}
++
++test "fh Codex errors incomplete terminals resets deadlines and cancellation invalidate pooled sockets" {
++    const alloc = std.testing.allocator;
++    const cases = [_]TransportFixture.Reply{
++        .{ .body = "{\"error\":\"fixture\"}", .status = 503 },
++        .{ .body = "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"incomplete\"}}\n\n" },
++        .{ .body = "data: [DONE]\n\n" },
++        .{ .body = "", .mode = .reset },
++        .{ .body = "", .mode = .stall },
++    };
++    for (cases, 0..) |bad, index| {
++        const replies = [_]TransportFixture.Reply{ bad, .{ .body = transport_test_body } };
++        var server = try TransportFixture.Server.init(&replies);
++        defer server.deinit();
++        try server.start();
++        const url = try server.url(alloc);
++        defer alloc.free(url);
++        const env = try TransportFixture.Env.init(e2e_endpoint_env, url);
++        defer env.deinit();
++        var scope = http_pool.Scope.init(alloc);
++        defer scope.deinit();
++        var probe: TransportProbe = .{ .timeout_ms = 80 };
++        if (probe.call(&scope)) |value| {
++            var result = value;
++            defer result.deinit(alloc);
++            try std.testing.expect(index == 0 and result == .failed);
++        } else |_| {}
++        try std.testing.expectEqual(stream_provider.DeliveryCertainty.State.possibly_sent, probe.delivery.load());
++        try std.testing.expectEqual(@as(usize, 0), scope.pool.?.freeConnectionCount());
++        probe.timeout_ms = 2000;
++        try probe.success(&scope);
++        try std.testing.expectEqual(@as(usize, 2), server.accepted.load(.acquire));
++    }
++    const replies = [_]TransportFixture.Reply{ .{ .body = "", .mode = .stall }, .{ .body = transport_test_body } };
++    var server = try TransportFixture.Server.init(&replies);
++    defer server.deinit();
++    try server.start();
++    const url = try server.url(alloc);
++    defer alloc.free(url);
++    const env = try TransportFixture.Env.init(e2e_endpoint_env, url);
++    defer env.deinit();
++    var scope = http_pool.Scope.init(alloc);
++    defer scope.deinit();
++    var probe: TransportProbe = .{};
++    const Canceller = struct {
++        fn run(peer: *TransportFixture.Server, cancel: *std.atomic.Value(bool)) void {
++            var waits: usize = 0;
++            while (peer.served.load(.acquire) == 0 and waits < 2000) : (waits += 1) io_mod.sleep(std.time.ns_per_ms);
++            cancel.store(true, .release);
++        }
++    };
++    const thread = try std.Thread.spawn(.{}, Canceller.run, .{ &server, &probe.cancel });
++    defer thread.join();
++    try std.testing.expectError(error.Cancelled, probe.call(&scope));
++    try std.testing.expectEqual(@as(usize, 0), scope.pool.?.freeConnectionCount());
++    try std.testing.expectEqual(stream_provider.DeliveryCertainty.State.possibly_sent, probe.delivery.load());
++    probe.cancel.store(false, .release);
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 2), server.accepted.load(.acquire));
++}
++
++test "fh Codex cache counters preserve unknown measured zero and reject out of range" {
++    try std.testing.expectEqual(@as(?u64, null), cacheCounter(null, 10));
++    try std.testing.expectEqual(@as(?u64, null), cacheCounter(1, null));
++    try std.testing.expectEqual(@as(?u64, null), cacheCounter(11, 10));
++    try std.testing.expectEqual(@as(?u64, 0), cacheCounter(0, 10));
++    try std.testing.expectEqual(@as(?u64, 4), cacheCounter(4, 10));
++}
++
++test "fh Codex server close and stale idle socket redial without claiming unsent delivery" {
++    const alloc = std.testing.allocator;
++    const replies = [_]TransportFixture.Reply{
++        .{ .body = transport_test_body, .mode = .close },
++        .{ .body = transport_test_body, .mode = .close_idle },
++        .{ .body = transport_test_body },
++    };
++    var server = try TransportFixture.Server.init(&replies);
++    defer server.deinit();
++    try server.start();
++    const url = try server.url(alloc);
++    defer alloc.free(url);
++    const env = try TransportFixture.Env.init(e2e_endpoint_env, url);
++    defer env.deinit();
++    var scope = http_pool.Scope.init(alloc);
++    defer scope.deinit();
++    var probe: TransportProbe = .{};
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 0), scope.pool.?.freeConnectionCount());
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 2), server.accepted.load(.acquire));
++    if (probe.call(&scope)) |value| {
++        var result = value;
++        result.deinit(alloc);
++        return error.ExpectedStaleConnectionFailure;
++    } else |_| {}
++    try std.testing.expectEqual(stream_provider.DeliveryCertainty.State.possibly_sent, probe.delivery.load());
++    try std.testing.expectEqual(@as(usize, 0), scope.pool.?.freeConnectionCount());
++    try probe.success(&scope);
++    try std.testing.expectEqual(@as(usize, 3), server.accepted.load(.acquire));
++}
++
++test "fh Codex stable instruction and tool prefix precedes changing input without wire extensions" {
++    const alloc = std.testing.allocator;
++    var fixed: stream_provider.RequestData = .{
++        .model = "gpt-5.6-luna",
++        .instructions = &.{.{ .role = .system, .content = "Stable instructions." }},
++        .messages = &.{.{ .role = .user, .content = "first observation" }},
++        .tool_choice = .none,
++        .provider_options = .{ .reasoning = types.ReasoningEffort.literal("medium"), .fast = true },
++    };
++    const first = try buildRequest(alloc, fixed);
++    defer alloc.free(first);
++    fixed.messages = &.{.{ .role = .user, .content = "different observation" }};
++    const second = try buildRequest(alloc, fixed);
++    defer alloc.free(second);
++    const first_input = std.mem.find(u8, first, ",\"input\":[").?;
++    const second_input = std.mem.find(u8, second, ",\"input\":[").?;
++    try std.testing.expectEqualStrings(first[0..first_input], second[0..second_input]);
++    try std.testing.expect(!std.mem.eql(u8, first, second));
++    for ([_][]const u8{ "prompt_cache", "generate", "max_output_tokens" }) |field| try std.testing.expect(std.mem.find(u8, first, field) == null);
++}
+--- a/src/main.zig
++++ b/src/main.zig
+@@ -1,9 +1,12 @@
++// Modified for Fasthands native Loops shell proof.
++// See vendor/fx/UPSTREAM.json and patches/fx/0001-loops-shell-proof.patch.
+ const std = @import("std");
+ const builtin = @import("builtin");
+ const build_options = @import("build_options");
+ const io_mod = @import("core/shared/io.zig");
++const fh_startup_runtime = @import("core/app/fh_startup.zig");
+ 
+-pub const version = "0.0.13";
++pub const version = build_options.app_version;
+ 
+ const app_lifecycle = @import("core/app/app_lifecycle.zig");
+ const provider_runtime = @import("core/app/provider_runtime.zig");
+@@ -364,7 +367,19 @@
+ var resize_interlock = shell_runtime.ResizeApprovalInterlock{};
+ const default_context_registry = context_contract.Registry{ .default_provider = builtin_context.provider };
+ const WorkspaceHostRuntime = if (host_target.is_wasm) js_host_workspace.Runtime else struct {};
+-const selected_host_profile = if (host_target.is_wasm) host_runtime_profile.wasm else host_runtime_profile.native;
++const selected_host_profile = if (host_target.is_wasm) host_runtime_profile.wasm else if (loops_shell) blk: {
++    var profile = host_runtime_profile.native;
++    profile.durable_sessions = true;
++    profile.profile_usage = false;
++    profile.file_index = false;
++    profile.mcp = false;
++    profile.subagents = false;
++    profile.auto_upgrade = false;
++    profile.skills = false;
++    profile.generation_usage = false;
++    profile.tools = false;
++    break :blk profile;
++} else host_runtime_profile.native;
+ const app_api_key_validator = if (host_target.is_wasm)
+     api_key_validator.unavailable_provider
+ else
+@@ -390,7 +405,15 @@
+     };
+ }
+ 
++const loops_client = @import("../../../native/loops_client.zig");
++const fh_loop_context = @import("gateway/fh_host.zig");
++const fh_loop_tools = @import("core/tooling/fh_loop_tools.zig");
++const loops_shell = build_options.loops_shell;
++
+ const App = struct {
++    pub fn isLoopsMode() bool {
++        return loops_shell;
++    }
+     pub const app_version = version;
+     pub const host_profile = selected_host_profile;
+     pub const input_limits = paste_framing.default_input_limits;
+@@ -430,10 +453,15 @@
+     }
+ 
+     pub fn promptPolicy(_: *const Self) prompt_policy.Policy {
++        if (loops_shell) return fh_startup_runtime.conversationPolicy(builtin_context.prompt_policy);
+         return builtin_context.prompt_policy;
+     }
+ 
+     pub fn slashRegistry(_: *const Self) command_specs.SlashRegistry {
++        if (loops_shell) {
++            const specs = comptime loops_client.slash_specs(command_specs.SlashSpec) ++ builtin_commands.slash_specs;
++            return .{ .commands = &specs };
++        }
+         return builtin_commands.slash_registry;
+     }
+ 
+@@ -513,6 +541,11 @@
+     }
+ 
+     alloc: Allocator,
++    loops: loops_client.Client = .{},
++    loops_has_run: bool = false,
++    fh_provider: fh_loop_context.Context = .{},
++    fh_startup: fh_startup_runtime.State = .{},
++    loops_sigint_guard: ?loops_client.SigintGuard = null,
+     terminal: TerminalState = .{},
+ 
+     auth: auth_runtime.Runtime = auth_runtime.Runtime.init(
+@@ -649,6 +682,7 @@
+             else
+                 .{},
+         );
++        if (loops_shell) app.loops_sigint_guard = loops_client.SigintGuard.install();
+         if (comptime host_profile.js_host_workspace) {
+             app.workspace_host = js_host_workspace.Runtime.init(alloc) catch |err| blk: {
+                 if (err != error.WorkspaceUnavailable) {
+@@ -679,7 +713,7 @@
+             default_max_agent_steps,
+             handle_sigwinch,
+             .{
+-                .load_mcp_runtime = if (comptime host_target.is_wasm) loadNoMcpRuntime else builtin_mcp.loadRuntime,
++                .load_mcp_runtime = if (comptime host_target.is_wasm or loops_shell) loadNoMcpRuntime else builtin_mcp.loadRuntime,
+                 .skill_root_policy = if (comptime host_target.is_wasm) wasm_skill_root_policy else builtin_skills.root_policy,
+                 .terminal_title = app.terminalTitle(),
+             },
+@@ -699,7 +733,7 @@
+             launch.modifiers.additional_directories,
+             launch.modifiers.saved_directories_suppressed,
+         );
+-        if (comptime !host_target.is_wasm) {
++        if (comptime !host_target.is_wasm and !loops_shell) {
+             app.provider_selection.ensureGatewayHttpPool();
+             if (app.provider_selection.selection().provider == .gateway) {
+                 if (app.provider_selection.gateway_http_pool) |pool| {
+@@ -707,6 +741,7 @@
+                 }
+             }
+         }
++        if (comptime !host_target.is_wasm) app.provider_selection.ensureCodexHttpScope();
+         app.context_limits.applyCommandLine(launch.modifiers.context_limit_overrides);
+         if (comptime host_profile.durable_sessions or host_profile.js_host_sessions) {
+             if (app.requested_resume != null) {
+@@ -735,8 +770,31 @@
+         try HostConfigAppRuntime.restore(&app, builtin_modes.registry);
+         SessionAppRuntime.syncTerminalTitle(&app);
+         return app;
++    }
++
++    pub fn prepareFhStartupSelection(self: *App, startup: *app_lifecycle.StartupState) !void {
++        self.loops.inference_display = loops_client.idleInferenceDisplay();
++        if (self.requested_resume != null or startup.model_source != .compiled_default) return;
++        const selected = self.loops.inference_display;
++        try fh_startup_runtime.seedSelectedPreferences(self.alloc, startup, selected.model, if (startup.effort == .auto) selected.reasoning else startup.effort.label(), if (startup.fast_mode_model_bound) startup.fast_mode else selected.fast);
++    }
++
++    pub fn augmentProjectContext(self: *App) !void {
++        if (loops_shell) {
++            var catalog = self.skills.acquireCatalog();
++            defer catalog.deinit();
++            try fh_startup_runtime.appendWarmContext(self.alloc, &self.fh_startup, &self.context_snapshot, .{ .skills = catalog.items, .diagnostics = catalog.diagnostics }, self.context_limits);
++            try fh_startup_runtime.ensureContext(self.alloc, io_mod.getIo(), &self.fh_startup, self.workspace_root);
++            if (self.fh_startup.context) |context| try fh_startup_runtime.appendContext(self.alloc, &self.context_snapshot, context);
++        }
+     }
+ 
++    pub fn loopsFooter(self: *App) ?loops_client.InferenceDisplay {
++        if (!loops_shell) return null;
++        if (self.loops.active) return self.loops.inference_display;
++        return .{ .model = self.provider_selection.selection().model, .reasoning = self.effort.label(), .fast = self.fast_mode };
++    }
++
+     pub fn persistAcceptedModel(self: *App, model: []const u8) !void {
+         HostConfigAppRuntime.persistModel(self, model);
+     }
+@@ -866,6 +924,7 @@
+         const was_interactive = self.terminal.raw_enabled or self.terminal.signal_handler_installed;
+         // Hand the terminal back first; nothing below renders.
+         self.releaseTerminal();
++        if (loops_shell) self.loops.bridge.shutdown();
+         shutdown_trace.mark("terminal_released");
+ 
+         self.auth.stopProviderPreparation();
+@@ -889,6 +948,10 @@
+         // The worker mutates session state, so it stops before persistence.
+         if (self.worker_thread) |thread| thread.join();
+         shutdown_trace.mark("worker_thread_joined");
++        if (loops_shell) {
++            self.fh_startup.deinit(self.alloc);
++            self.loops.deinit();
++        }
+         WorkerAppRuntime.settleFinishedPromptsForShutdown(self) catch |err| {
+             SessionAppRuntime.recordShutdownFailure(self, err);
+         };
+@@ -925,6 +988,7 @@
+         terminal_cols: u16,
+         sessions_v2: bool,
+     ) ![]const u8 {
++        if (loops_shell) return fh_startup_runtime.formatResumeHandoff(buffer, session_id, terminal_cols, sessions_v2, ui_render.dim_style, ui_render.reset_style);
+         return ui_render.formatResumeHandoff(buffer, session_id, terminal_cols, sessions_v2);
+     }
+ 
+@@ -953,8 +1017,13 @@
+         shutdown_trace.mark("background_stops_requested");
+ 
+         self.releaseTerminal();
++        if (loops_shell) self.loops.bridge.shutdown();
+         if (self.worker_thread) |thread| thread.join();
+         shutdown_trace.mark("worker_thread_joined");
++        if (loops_shell) {
++            self.fh_startup.deinit(self.alloc);
++            self.loops.deinit();
++        }
+         WorkerAppRuntime.settleFinishedPromptsForShutdown(self) catch |err| {
+             SessionAppRuntime.recordShutdownFailure(self, err);
+         };
+@@ -1007,6 +1076,10 @@
+     }
+ 
+     pub fn releaseTerminal(self: *App) void {
++        defer if (self.loops_sigint_guard) |*guard| {
++            guard.deinit();
++            self.loops_sigint_guard = null;
++        };
+         if (!self.terminal.raw_enabled and !self.terminal.signal_handler_installed) return;
+         app_lifecycle.shutdownInteractiveShell(
+             &self.terminal,
+@@ -1059,6 +1132,10 @@
+     }
+ 
+     pub fn ensurePromptCredential(self: *App) !bool {
++        if (loops_shell and self.loops.active) {
++            try self.writeDomainNotice(.{ .topic = "loops", .body = "Wait for the foreground operation or cancel it before chatting.", .tone = .neutral }, true);
++            return false;
++        }
+         return AuthAppRuntime.admitPromptCredential(self);
+     }
+ 
+@@ -1069,6 +1146,12 @@
+     pub fn startPromptCredentialPrewarm(self: *App) void {
+         if (comptime !host_target.is_wasm) {
+             AuthAppRuntime.startPromptCredentialPrewarm(self);
++            if (self.provider_selection.selection().provider == .codex) {
++                self.provider_selection.ensureCodexHttpScope();
++                if (self.provider_selection.codex_http_scope) |scope| {
++                    if (@import("gateway/openai_codex.zig").warmEndpoint()) |url| scope.warmAsync(url);
++                }
++            }
+         }
+     }
+ 
+@@ -1134,6 +1217,7 @@
+ 
+     pub fn loopPollTimeoutMs(ctx: *anyopaque, default_timeout_ms: i32) i32 {
+         const self: *App = @ptrCast(@alignCast(ctx));
++        if (loops_shell and self.fh_startup.mailbox != null) return @min(default_timeout_ms, 50);
+         if (comptime !host_target.is_wasm) {
+             return nativeLoopPollTimeoutMs(
+                 default_timeout_ms,
+@@ -1166,6 +1250,9 @@
+     }
+ 
+     pub fn handleCommand(self: *App, cmd: []const u8) !void {
++        if (loops_shell) {
++            if (!fhNativeAccountCommand(std.mem.trimStart(u8, cmd, "/")) and try loops_client.submit(self, cmd, io_mod.milliTimestamp())) return;
++        }
+         try app_commands.Handlers(App).route(self, cmd);
+     }
+ 
+@@ -1194,6 +1281,14 @@
+     }
+ 
+     pub fn enqueuePromptWithSkillBindings(self: *App, prompt: []const u8, skill_tokens: []const registered_entities.SkillTokenSpan) !bool {
++        if (loops_shell) {
++            if (self.loops.active) {
++                try self.writeDomainNotice(.{ .topic = "loops", .body = "Wait for the foreground operation or cancel it before chatting.", .tone = .neutral }, true);
++                return false;
++            }
++            self.fh_provider.bridge = &self.loops.bridge;
++            if (self.worker_thread == null) try app_process_runtime.Runtime(App).startWorkerThread(self);
++        }
+         const context_targets = if (self.context_enabled)
+             try context_contract.applicableTargetsForImages(self.alloc, self.pending_images.items)
+         else
+@@ -1239,6 +1334,10 @@
+         self: *App,
+         draft: *const input_submit_runtime.PendingPromptDraft,
+     ) !void {
++        if (loops_shell) {
++            self.fh_provider.bridge = &self.loops.bridge;
++            if (self.worker_thread == null) try app_process_runtime.Runtime(App).startWorkerThread(self);
++        }
+         const context_targets = if (self.context_enabled)
+             try context_contract.applicableTargetsForImages(self.alloc, draft.images)
+         else
+@@ -1274,6 +1373,12 @@
+         try InputSubmitRuntime.acceptPresentedPrompt(self, turn_id);
+     }
+ 
++    pub fn cancelLoopsOperation(self: *App) !bool {
++        if (!loops_shell or !self.loops.cancel()) return false;
++        try loops_client.advance(self, io_mod.milliTimestamp());
++        return true;
++    }
++
+     pub fn cancelPendingSubmission(self: *App) bool {
+         return InputSubmitRuntime.cancelPendingSubmission(self);
+     }
+@@ -1844,6 +1949,7 @@
+     }
+ 
+     fn effectiveToolSet(self: *const App) tool_set_contract.ToolSet {
++        if (comptime loops_shell) return fh_loop_tools.set;
+         if (comptime host_profile.tools) {
+             return builtin_tools.advertisement_set;
+         }
+@@ -2121,6 +2227,13 @@
+                 providers.gateway.agent_stream = stamped;
+             }
+         }
++        if (self.provider_selection.codex_http_scope) |scope| {
++            if (providers.codex.agent_stream) |stream| {
++                var stamped = stream;
++                stamped.context = scope;
++                providers.codex.agent_stream = stamped;
++            }
++        }
+         if (comptime !host_profile.tools) {
+             providers.gateway.permission_reviewer = null;
+             providers.codex.permission_reviewer = null;
+@@ -2158,7 +2271,8 @@
+     }
+ 
+     pub fn requestToolPermissionSync(self: *App, arena: Allocator, call: ToolCall, review_turn: permission_auto_classifier.ReviewTurnContext, permission_mode: PermissionMode, local_grants: []const PermissionGrant, live_authority: ?agent_runtime.LiveToolAuthority, revalidation: ?agent_runtime.LivePermissionRevalidation, advertised_dynamic_tool_names: []const []const u8, mcp_review_schema_json: ?[]const u8) !command_admission.PermissionOutcome {
+-        return AgentAppRuntime.requestToolPermissionSync(self, arena, call, review_turn, permission_mode, local_grants, live_authority, revalidation, advertised_dynamic_tool_names, mcp_review_schema_json, &ignored_list_entries, max_list_entries, max_read_file_bytes, max_read_file_lines, max_read_file_line_len, max_command_output_bytes, builtin_gateway.retry_count, builtin_gateway.defaultChatUrl());
++        const effective_mode = if (loops_shell) fh_loop_tools.effectivePermissionMode(call.name, permission_mode, self.permissionReviewerProvider() != null) else permission_mode;
++        return AgentAppRuntime.requestToolPermissionSync(self, arena, call, review_turn, effective_mode, local_grants, live_authority, revalidation, advertised_dynamic_tool_names, mcp_review_schema_json, &ignored_list_entries, max_list_entries, max_read_file_bytes, max_read_file_lines, max_read_file_line_len, max_command_output_bytes, builtin_gateway.retry_count, builtin_gateway.defaultChatUrl());
+     }
+ 
+     pub fn requestToolPermissionSyncWithAdvertised(self: *App, arena: Allocator, call: ToolCall, review_turn: permission_auto_classifier.ReviewTurnContext, permission_mode: PermissionMode, local_grants: []const PermissionGrant, live_authority: ?agent_runtime.LiveToolAuthority, revalidation: ?agent_runtime.LivePermissionRevalidation, advertised_dynamic_tool_names: []const []const u8, mcp_review_schema_json: ?[]const u8) !command_admission.PermissionOutcome {
+@@ -2170,6 +2284,9 @@
+     }
+ 
+     pub fn validateToolCall(self: *App, arena: Allocator, call: ToolCall) !agent_runtime.ToolCallValidationResult {
++        if (loops_shell) fh_loop_tools.validateWorkspaceCall(arena, self.workspace_root, call) catch |err| {
++            return .{ .failure = try std.fmt.allocPrint(arena, "Tool target is outside the current workspace or invalid: {s}", .{@errorName(err)}) };
++        };
+         return AgentAppRuntime.validateToolCall(self, arena, call, &ignored_list_entries, max_list_entries, max_read_file_bytes, max_read_file_lines, max_read_file_line_len, max_command_output_bytes, builtin_gateway.retry_count, builtin_gateway.defaultChatUrl());
+     }
+ 
+@@ -2389,8 +2506,7 @@
+ 
+     pub fn processQueuedWork(self: *App, work: WorkItem, failure_provenance: *?@import("core/output/compaction_activity.zig").ErrorProvenance) !void {
+         const result = switch (work) {
+-            .prompt => |job| AgentAppRuntime.processQueuedPrompt(
+-                self,
++            .prompt => |job| self.processQueuedFhPrompt(
+                 job,
+                 builtin_gateway.retry_count,
+                 builtin_gateway.defaultChatUrl(),
+@@ -2409,8 +2525,22 @@
+         };
+     }
+ 
++    fn processQueuedFhPrompt(self: *App, job: QueuedPrompt, retry_count: usize, chat_url: []const u8, failure_provenance: *?@import("core/output/compaction_activity.zig").ErrorProvenance) !void {
++        if (loops_shell) try self.fh_provider.bindTurn(job.turn_id, self.workspace_root, job.provider, job.model, job.agent_settings.effort, job.agent_settings.fast_mode, &self.worker.worker_cancel_requested);
++        var settled = false;
++        defer if (loops_shell and !settled) self.fh_provider.finish(std.heap.c_allocator, true) catch {};
++        try AgentAppRuntime.processQueuedPrompt(self, job, retry_count, chat_url, failure_provenance);
++        if (loops_shell) try self.fh_provider.finish(std.heap.c_allocator, false);
++        settled = true;
++    }
++
++    pub fn fhHostToolProvider(self: *App) ?tool_dispatch.HostToolProvider {
++        if (comptime loops_shell) return self.fh_provider.hostProvider();
++        return null;
++    }
++
+     pub fn executeToolCall(self: *App, request: agent_runtime.ToolExecutionRequest) !ToolExecutionResult {
+-        if (comptime !host_profile.tools) {
++        if (comptime !host_profile.tools and !loops_shell) {
+             if (comptime !host_profile.js_host_workspace) {
+                 return agent_runtime.unavailableHostToolResult(request.result_allocator);
+             }
+@@ -2869,6 +2999,10 @@
+         }
+     }
+ 
++    pub fn preemptStartupForTerminalIngress(self: *App, ingress: input_action.TerminalInputIngress) !void {
++        if (loops_shell and fh_startup_runtime.userInput(ingress)) try fh_startup_runtime.preempt(self);
++    }
++
+     fn handleTerminalInputByte(self: *App, byte: u8) !void {
+         try InputAppRuntime.handleTerminalByteAcrossSessionTransition(
+             self,
+@@ -3049,6 +3183,15 @@
+ 
+     pub fn loopCollectFacts(ctx: *anyopaque) !void {
+         const self: *App = @ptrCast(@alignCast(ctx));
++        if (loops_shell) {
++            if (loops_client.SigintGuard.requested()) {
++                _ = self.loops.cancel();
++                self.should_exit = true;
++                return;
++            }
++            try loops_client.advance(self, io_mod.milliTimestamp());
++            try fh_startup_runtime.collect(self);
++        }
+         if (!try WorkerAppRuntime.authorizeInteractiveAdmission(self)) return;
+ 
+         if (comptime !host_target.is_wasm) {
+@@ -3215,6 +3358,7 @@
+         _ = try InputAppRuntime.flushDeferredSessionInput(self, input_limits, max_prompt_history);
+         if (self.should_exit) return;
+         try self.flushRequestedFrame();
++        if (loops_shell and try fh_startup_runtime.afterFrame(self)) try self.flushRequestedFrame();
+         if (comptime !host_target.is_wasm) {
+             try SessionAppRuntime.settlePendingLiveSessionTransition(self);
+             if (try InputAppRuntime.flushDeferredSessionInput(self, input_limits, max_prompt_history)) try self.flushRequestedFrame();
+@@ -3417,11 +3561,46 @@
+ pub fn main(c_argc: c_int, c_argv: [*][*:0]c_char, c_envp: [*:null]?[*:0]c_char) callconv(.c) c_int {
+     mainC(c_argc, c_argv, c_envp) catch return 1;
+     return 0;
++}
++
++fn fhNativeAccountCommand(command: []const u8) bool {
++    var words = std.mem.tokenizeAny(u8, command, " \t");
++    const name = words.next() orelse return false;
++    for ([_][]const u8{ "login", "logout", "status", "models", "setup", "provider" }) |native| {
++        if (std.mem.eql(u8, name, native)) return true;
++    }
++    return false;
+ }
+ 
+ fn mainC(c_argc: c_int, c_argv: [*][*:0]c_char, c_envp: [*:null]?[*:0]c_char) !void {
+     const raw_args = rawArgs(c_argc, c_argv);
+     const raw_env: RawEnviron = @ptrCast(c_envp);
++    // Direct Loops use the same native config/credential resolver as chat.
++    // Install its environment before dispatching a foreground request.
++    io_mod.setRawEnviron(raw_env);
++
++    if (loops_shell) {
++        if (loops_client.identityCommand(raw_args)) |code| std.c.exit(code);
++        if (try loops_client.fastpath(raw_args)) return;
++        try loops_client.environment();
++        if (raw_args.len >= 2 and !fhNativeAccountCommand(std.mem.span(raw_args[1])) and !command_runner.isForegroundSessionInvocation(&.{std.mem.span(raw_args[1])})) {
++            // The original provider's bounded HTTP path requires concurrent
++            // cancellation/deadline watches. Direct Loops bypass app startup.
++            var threaded = std.Io.Threaded.init(processAllocator(), .{
++                .argv0 = .init(argsFromRaw(raw_args)),
++                .environ = .{ .block = environBlockFromRaw(raw_env) },
++            });
++            defer threaded.deinit();
++            io_mod.setIo(threaded.io());
++            const code = (try loops_client.direct(raw_args)) orelse return error.InvalidLoopsInvocation;
++            std.c.exit(code);
++        }
++    }
++    if (loops_shell and !loops_client.allows_cli(raw_args)) {
++        const message = "fh shell proof supports help, --version, and the interactive /run fixture.\n";
++        _ = std.c.write(std.posix.STDERR_FILENO, message.ptr, message.len);
++        return error.UnsupportedLoopsProofCommand;
++    }
+ 
+     if (comptime terminal_native_session.isSupported()) {
+         if (terminal_native_session.isControlModeRaw(raw_args)) {
+@@ -3520,6 +3699,19 @@
+         if (early_threaded) |*threaded| io_mod.setIo(threaded.io());
+     }
+ 
++    if (loops_shell and cli_args.len > 0 and std.mem.eql(u8, cli_args[0], "setup")) {
++        exitFast(try @import("../../../native/onboarding.zig").run(alloc, cli_args[1..], app_entry_runtime.cliSurfaceConfig(cfg)));
++    }
++    if (loops_shell and cli_args.len > 0 and std.mem.eql(u8, cli_args[0], "status")) {
++        var surface = app_entry_runtime.cliSurfaceConfig(cfg);
++        surface.inspect_decision_status = @import("../../../native/decision_status.zig").inspect;
++        exitFast(switch (try cli_surface.runIfRequested(alloc, cli_args, surface)) {
++            .handled_success => 0,
++            .handled_failure => 1,
++            .handled_exit => |code| code,
++            .interactive => return error.InvalidStatusInvocation,
++        });
++    }
+     const before = try app_entry_runtime.runBeforeInteractive(alloc, cli_args, cfg);
+     switch (before) {
+         .interactive => |launch| {
+@@ -3531,6 +3723,14 @@
+             });
+             io_mod.setIo(threaded.io());
+ 
++            if (loops_shell and cli_args.len == 0 and auth_mode == .local and std.c.isatty(0) != 0) {
++                const onboarding = @import("../../../native/onboarding.zig");
++                try onboarding.preserveExisting(alloc);
++                if (try onboarding.needed(alloc)) {
++                    const setup_code = try onboarding.run(alloc, &.{}, app_entry_runtime.cliSurfaceConfig(fullEntryConfig(auth_mode)));
++                    if (setup_code != 0) exitFast(setup_code);
++                }
++            }
+             var owned_launch = launch;
+             // Interactive shutdown has already persisted the session and
+             // terminated child processes. What remains is freeing memory and
+@@ -4964,4 +5164,9 @@
+     _ = @import("core/agent/worker_runtime.zig");
+     _ = @import("gateway/client.zig");
+     _ = @import("gateway/host_stream_provider.zig");
++}
++
++// The interactive build metadata must identify the same application as the CLI.
++test "fh interactive build metadata agrees with direct CLI version" {
++    try std.testing.expectEqualStrings(loops_client.version, currentBuild().version);
+ }
+--- a/src/ui/render.zig
++++ b/src/ui/render.zig
+@@ -1,3 +1,4 @@
++// Modified for Fasthands; see patches/fx/README.md for the integration changes.
+ const std = @import("std");
+ const build_options = @import("build_options");
+ const io_mod = @import("../core/shared/io.zig");
+@@ -188,7 +189,7 @@
+     );
+     return std.fmt.allocPrint(
+         alloc,
+-        "{s}𝒇x{s}{s} {s} · Run /help for commands" ++ reset_style ++ "\n\n",
++        "{s}𝒇h{s}{s} {s} · Run /help for commands" ++ reset_style ++ "\n\n",
+         .{ subtitle_style, reset_style, dim_style, build_label },
+     );
+ }
+@@ -932,7 +933,7 @@
+     const message = try welcomeMessage(std.testing.allocator);
+     defer std.testing.allocator.free(message);
+ 
+-    try std.testing.expect(std.mem.find(u8, message, "𝒇x") != null);
++    try std.testing.expect(std.mem.find(u8, message, "𝒇h") != null);
+     try std.testing.expect(std.mem.find(u8, message, main.version) != null);
+     try std.testing.expect(std.mem.find(u8, message, "/help") != null);
+ }
+@@ -951,7 +952,7 @@
+     );
+     const expected = try std.fmt.allocPrint(
+         std.testing.allocator,
+-        "{s}𝒇x{s}{s} {s} · Run /help for commands" ++ reset_style ++ "\n\n",
++        "{s}𝒇h{s}{s} {s} · Run /help for commands" ++ reset_style ++ "\n\n",
+         .{ subtitle_style, reset_style, dim_style, build_label },
+     );
+     defer std.testing.allocator.free(expected);

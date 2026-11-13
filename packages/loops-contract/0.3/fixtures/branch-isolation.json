@@ -1,0 +1,36 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"pair\",\n      \"kind\": \"parallel\",\n      \"branches\": {\n        \"a\": [\n          {\n            \"id\": \"a1\",\n            \"kind\": \"infer\",\n            \"requires\": [],\n            \"instructions\": \"Return JSON.\",\n            \"input\": {\n              \"from\": \"/input\"\n            },\n            \"output\": {\n              \"schema\": {\n                \"type\": \"object\"\n              }\n            }\n          }\n        ],\n        \"b\": [\n          {\n            \"id\": \"b0\",\n            \"kind\": \"infer\",\n            \"requires\": [],\n            \"instructions\": \"Return JSON.\",\n            \"input\": {\n              \"from\": \"/input\"\n            },\n            \"output\": {\n              \"schema\": {\n                \"type\": \"object\"\n              }\n            }\n          },\n          {\n            \"id\": \"b1\",\n            \"kind\": \"code\",\n            \"runtime\": \"python3\",\n            \"file\": \"echo.py\",\n            \"requires\": [],\n            \"input\": {\n              \"from\": \"/steps/a1/output\"\n            },\n            \"output\": {\n              \"schema\": true\n            }\n          }\n        ]\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/pair/output\"\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "x": 1
+  },
+  "scenario": {
+    "responses": [
+      {
+        "path": "pair/a/a1",
+        "pass": 0,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "a": 1
+        }
+      },
+      {
+        "path": "pair/b/b0",
+        "pass": 0,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "b": 0
+        }
+      }
+    ]
+  }
+}

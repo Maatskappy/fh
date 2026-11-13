@@ -1,0 +1,73 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"draft\",\n      \"kind\": \"infer\",\n      \"requires\": [],\n      \"instructions\": \"Return JSON.\",\n      \"input\": {\n        \"topic\": {\n          \"from\": \"/input/topic\"\n        },\n        \"previous\": {\n          \"from\": \"/carry\"\n        }\n      },\n      \"output\": {\n        \"schema\": {\n          \"type\": \"object\",\n          \"required\": [\n            \"text\"\n          ],\n          \"properties\": {\n            \"text\": {\n              \"type\": \"string\"\n            }\n          },\n          \"additionalProperties\": false\n        }\n      }\n    },\n    {\n      \"id\": \"judge\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"judge.py\",\n      \"requires\": [],\n      \"input\": {\n        \"from\": \"/steps/draft/output\"\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/judge/output\"\n  },\n  \"repeat\": {\n    \"from\": \"draft\",\n    \"through\": \"judge\",\n    \"max_iterations\": 3,\n    \"until\": {\n      \"from\": \"/steps/judge/output/ready\"\n    },\n    \"carry\": {\n      \"initial\": {\n        \"value\": null\n      },\n      \"next\": {\n        \"from\": \"/steps/draft/output/text\"\n      }\n    }\n  }\n}\n",
+    "judge.py": "import json, sys\nx = json.load(sys.stdin)\nprint(json.dumps({'ready': x['text'] == 'good'}))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "topic": "t"
+  },
+  "scenario": {
+    "driver": "agent",
+    "ops": [
+      {
+        "op": "next",
+        "expect": [
+          "draft"
+        ]
+      },
+      {
+        "op": "submit",
+        "path": "draft",
+        "pass": 1,
+        "output": {
+          "text": "rough"
+        },
+        "expect": "accepted"
+      },
+      {
+        "op": "next",
+        "expect": [
+          "draft"
+        ]
+      },
+      {
+        "op": "submit",
+        "path": "draft",
+        "pass": 1,
+        "output": {
+          "text": "rough"
+        },
+        "expect": "accepted"
+      },
+      {
+        "op": "next",
+        "expect": [
+          "draft"
+        ]
+      },
+      {
+        "op": "submit",
+        "path": "draft",
+        "pass": 1,
+        "output": {
+          "text": "good"
+        },
+        "expect": "conflict"
+      },
+      {
+        "op": "submit",
+        "path": "draft",
+        "pass": 2,
+        "output": {
+          "text": "good"
+        },
+        "expect": "accepted"
+      },
+      {
+        "op": "next",
+        "expect": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "version": "fh.capture/0.1",
+  "url": "https://example.com",
+  "viewport": {"width": 1280, "height": 720},
+  "timeout_ms": 10000,
+  "checkpoints": [
+    {
+      "id": "loaded",
+      "wait": "document.readyState !== 'loading' && document.body.innerText.length > 0",
+      "evaluate": "({title: document.title, text: document.body.innerText.slice(0, 2000)})",
+      "screenshot": true
+    }
+  ]
+}

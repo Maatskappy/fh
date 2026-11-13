@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "id": "complete",
+      "input": {
+        "draft": "The migration copied 42 rows and matched the checksum.",
+        "requirements": ["Report the copied row count.", "Report whether the checksum matched.", "Use one short sentence."]
+      },
+      "expect": {"pointer": "/action", "value": "ready"}
+    },
+    {
+      "id": "incomplete",
+      "input": {
+        "draft": "The migration ran.",
+        "requirements": ["Report the copied row count.", "Report whether the checksum matched.", "Use one short sentence."]
+      },
+      "expect": {"pointer": "/action", "value": "revise"}
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "format": "loops/0.4",
+  "name": "increment-wasm",
+  "version": "1.0.0",
+  "dependencies": {
+    "runtimes": {}
+  },
+  "inputs": {
+    "schema": {
+      "type": "object",
+      "required": [
+        "number"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": -1000000,
+          "maximum": 1000000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "steps": [
+    {
+      "id": "increment",
+      "kind": "code",
+      "runtime": "wasm32-wasi-json/1",
+      "file": "increment.wasm",
+      "requires": [],
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "answer"
+          ],
+          "properties": {
+            "answer": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "output": {
+    "from": "/steps/increment/output"
+  }
+}

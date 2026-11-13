@@ -1,0 +1,60 @@
+{
+  "steps": [
+    {
+      "path": "pair/a/a1",
+      "pass": 0,
+      "input": {
+        "x": 1
+      },
+      "output": {
+        "a": 1
+      }
+    },
+    {
+      "path": "pair/b/b0",
+      "pass": 0,
+      "input": {
+        "x": 1
+      },
+      "output": {
+        "b": 0
+      }
+    },
+    {
+      "path": "pair",
+      "pass": 0,
+      "output": {
+        "a": {
+          "status": "completed",
+          "output": {
+            "a": 1
+          }
+        },
+        "b": {
+          "status": "failed",
+          "error": {
+            "reason": "missing_binding"
+          }
+        }
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "a": {
+        "status": "completed",
+        "output": {
+          "a": 1
+        }
+      },
+      "b": {
+        "status": "failed",
+        "error": {
+          "reason": "missing_binding"
+        }
+      }
+    }
+  }
+}

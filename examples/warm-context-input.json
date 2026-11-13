@@ -1,0 +1,19 @@
+{
+  "task": "Should we proceed with this change?",
+  "project": "Example repository",
+  "rules": [
+    "Hold if any supplied check failed.",
+    "Use only the supplied evidence.",
+    "Name each failed check."
+  ],
+  "evidence": [
+    {
+      "check": "typecheck",
+      "status": "passed"
+    },
+    {
+      "check": "unit-tests",
+      "status": "failed"
+    }
+  ]
+}

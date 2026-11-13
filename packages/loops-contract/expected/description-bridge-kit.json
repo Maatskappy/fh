@@ -1,0 +1,180 @@
+{
+  "steps": [
+    {
+      "step": "prepare_brief",
+      "pass": 0,
+      "input": {
+        "subject": "Tabletop Paper Bridge Kit",
+        "audience": "Families at a fictional weekend making club",
+        "features": [
+          "Contains foldable paper beams and reusable clips",
+          "Includes illustrated assembly cards",
+          "Provides small wooden tokens for testing the finished bridge"
+        ]
+      },
+      "output": {
+        "brief": {
+          "subject": "Tabletop Paper Bridge Kit",
+          "audience": "Families at a fictional weekend making club",
+          "features": [
+            "Contains foldable paper beams and reusable clips",
+            "Includes illustrated assembly cards",
+            "Provides small wooden tokens for testing the finished bridge"
+          ]
+        },
+        "previous_draft": null,
+        "prior_feedback": []
+      }
+    },
+    {
+      "step": "compose_description",
+      "pass": 1,
+      "input": {
+        "brief": {
+          "subject": "Tabletop Paper Bridge Kit",
+          "audience": "Families at a fictional weekend making club",
+          "features": [
+            "Contains foldable paper beams and reusable clips",
+            "Includes illustrated assembly cards",
+            "Provides small wooden tokens for testing the finished bridge"
+          ]
+        },
+        "previous_draft": null,
+        "prior_feedback": []
+      },
+      "output": {
+        "draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Background\nThe kit introduces simple bridge construction through paper parts.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens."
+      }
+    },
+    {
+      "step": "inspect_sections",
+      "pass": 1,
+      "input": {
+        "draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Background\nThe kit introduces simple bridge construction through paper parts.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+        "subject": "Tabletop Paper Bridge Kit"
+      },
+      "output": {
+        "ready": false,
+        "background_present": true,
+        "background_heading_lines": [
+          4
+        ],
+        "headings": [
+          "overview",
+          "background",
+          "use"
+        ],
+        "feedback": [
+          "Remove the Background section headed on line(s) 4, including all of its body text. Keep only Overview and Use sections."
+        ]
+      }
+    },
+    {
+      "step": "compose_description",
+      "pass": 2,
+      "input": {
+        "brief": {
+          "subject": "Tabletop Paper Bridge Kit",
+          "audience": "Families at a fictional weekend making club",
+          "features": [
+            "Contains foldable paper beams and reusable clips",
+            "Includes illustrated assembly cards",
+            "Provides small wooden tokens for testing the finished bridge"
+          ]
+        },
+        "previous_draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Background\nThe kit introduces simple bridge construction through paper parts.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+        "prior_feedback": [
+          "Remove the Background section headed on line(s) 4, including all of its body text. Keep only Overview and Use sections."
+        ]
+      },
+      "output": {
+        "draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens."
+      }
+    },
+    {
+      "step": "inspect_sections",
+      "pass": 2,
+      "input": {
+        "draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+        "subject": "Tabletop Paper Bridge Kit"
+      },
+      "output": {
+        "ready": true,
+        "background_present": false,
+        "background_heading_lines": [],
+        "headings": [
+          "overview",
+          "use"
+        ],
+        "feedback": []
+      }
+    },
+    {
+      "step": "publish_description",
+      "pass": 0,
+      "input": {
+        "subject": "Tabletop Paper Bridge Kit",
+        "draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+        "assessment": {
+          "ready": true,
+          "background_present": false,
+          "background_heading_lines": [],
+          "headings": [
+            "overview",
+            "use"
+          ],
+          "feedback": []
+        }
+      },
+      "output": {
+        "subject": "Tabletop Paper Bridge Kit",
+        "description": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+        "assessment": {
+          "ready": true,
+          "background_present": false,
+          "background_heading_lines": [],
+          "headings": [
+            "overview",
+            "use"
+          ],
+          "feedback": []
+        }
+      }
+    }
+  ],
+  "carry": [
+    {
+      "forPass": 1,
+      "value": {
+        "previous_draft": null,
+        "prior_feedback": []
+      }
+    },
+    {
+      "forPass": 2,
+      "value": {
+        "previous_draft": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Background\nThe kit introduces simple bridge construction through paper parts.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+        "prior_feedback": [
+          "Remove the Background section headed on line(s) 4, including all of its body text. Keep only Overview and Use sections."
+        ]
+      }
+    }
+  ],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "subject": "Tabletop Paper Bridge Kit",
+      "description": "## Overview\nTabletop Paper Bridge Kit offers families at a fictional weekend making club a hands-on bridge activity.\n\n## Use\nFollow the illustrated assembly cards, connect foldable paper beams with reusable clips, and test the finished bridge with small wooden tokens.",
+      "assessment": {
+        "ready": true,
+        "background_present": false,
+        "background_heading_lines": [],
+        "headings": [
+          "overview",
+          "use"
+        ],
+        "feedback": []
+      }
+    }
+  }
+}

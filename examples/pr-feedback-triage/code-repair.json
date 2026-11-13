@@ -1,0 +1,15 @@
+{
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "feedback": {
+    "id": "code-repair",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "review",
+    "status": "none",
+    "text": "In src/users.py line 42, request.user can be None for anonymous requests. Dereferencing request.user.name raises AttributeError and returns HTTP 500. Handle the anonymous case before accessing name.",
+    "url": "https://github.com/example/project/pull/42#discussion_r101",
+    "check_name": null,
+    "file": "src/users.py",
+    "line": 42,
+    "review_blocked": false
+  }
+}

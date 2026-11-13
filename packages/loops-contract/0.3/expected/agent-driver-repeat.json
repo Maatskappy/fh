@@ -1,0 +1,62 @@
+{
+  "steps": [
+    {
+      "path": "draft",
+      "pass": 1,
+      "input": {
+        "topic": "t",
+        "previous": null
+      },
+      "output": {
+        "text": "rough"
+      }
+    },
+    {
+      "path": "judge",
+      "pass": 1,
+      "input": {
+        "text": "rough"
+      },
+      "output": {
+        "ready": false
+      }
+    },
+    {
+      "path": "draft",
+      "pass": 2,
+      "input": {
+        "topic": "t",
+        "previous": "rough"
+      },
+      "output": {
+        "text": "good"
+      }
+    },
+    {
+      "path": "judge",
+      "pass": 2,
+      "input": {
+        "text": "good"
+      },
+      "output": {
+        "ready": true
+      }
+    }
+  ],
+  "carry": [
+    {
+      "forPass": 1,
+      "value": null
+    },
+    {
+      "forPass": 2,
+      "value": "rough"
+    }
+  ],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "ready": true
+    }
+  }
+}

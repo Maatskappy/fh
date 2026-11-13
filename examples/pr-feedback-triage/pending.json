@@ -1,0 +1,15 @@
+{
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "feedback": {
+    "id": "pending",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "check",
+    "status": "pending",
+    "text": "Check queued.",
+    "url": "https://github.com/example/project/pull/42#discussion_r101",
+    "check_name": "unit-tests",
+    "file": null,
+    "line": null,
+    "review_blocked": false
+  }
+}

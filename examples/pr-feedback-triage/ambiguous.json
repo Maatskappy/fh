@@ -1,0 +1,15 @@
+{
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "feedback": {
+    "id": "ambiguous",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "check",
+    "status": "fail",
+    "text": "Job failed. No error log, failing assertion or service status is available.",
+    "url": "https://github.com/example/project/pull/42#discussion_r101",
+    "check_name": "integration-tests",
+    "file": null,
+    "line": null,
+    "review_blocked": false
+  }
+}

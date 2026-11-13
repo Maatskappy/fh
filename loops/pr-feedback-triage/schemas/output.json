@@ -1,0 +1,193 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proposal_only",
+    "action",
+    "next_step",
+    "reason",
+    "head_sha",
+    "evidence",
+    "gated_by",
+    "decision"
+  ],
+  "properties": {
+    "proposal_only": {
+      "const": true
+    },
+    "action": {
+      "enum": [
+        "repair_code",
+        "answer_reviewer",
+        "investigate_infrastructure",
+        "no_action",
+        "gather_context",
+        "ignore_stale",
+        "wait_for_ci",
+        "restore_review"
+      ]
+    },
+    "next_step": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "head_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "url",
+        "sha",
+        "kind",
+        "location",
+        "excerpt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "sha": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "kind": {
+          "enum": [
+            "review",
+            "check"
+          ]
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 600
+        },
+        "excerpt": {
+          "type": "string",
+          "maxLength": 600
+        }
+      }
+    },
+    "gated_by": {
+      "enum": [
+        "code",
+        "jev"
+      ]
+    },
+    "decision": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model",
+            "answers"
+          ],
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "answers": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "feedback"
+              ],
+              "properties": {
+                "feedback": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "type",
+                    "choice",
+                    "confidence",
+                    "probabilities"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "choice"
+                    },
+                    "choice": {
+                      "enum": [
+                        "code_issue",
+                        "clarification",
+                        "infrastructure",
+                        "informational",
+                        "insufficient"
+                      ]
+                    },
+                    "confidence": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "probabilities": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code_issue",
+                        "clarification",
+                        "infrastructure",
+                        "informational",
+                        "insufficient"
+                      ],
+                      "properties": {
+                        "code_issue": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "clarification": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "infrastructure": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "informational": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "insufficient": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

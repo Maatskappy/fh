@@ -1,0 +1,15 @@
+{
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "feedback": {
+    "id": "quota",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "check",
+    "status": "pass",
+    "text": "Review rate limited. No code review ran.",
+    "url": "https://github.com/example/project/pull/42#discussion_r101",
+    "check_name": "CodeRabbit",
+    "file": null,
+    "line": null,
+    "review_blocked": true
+  }
+}

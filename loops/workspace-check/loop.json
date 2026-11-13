@@ -1,0 +1,30 @@
+{
+  "format": "loops/0.4",
+  "name": "workspace-check",
+  "version": "0.2.0",
+  "description": "Suggest a next step from an explicit bounded workspace snapshot without executing discovered packages.",
+  "inputs": {
+    "schema": "schemas/input.json"
+  },
+  "steps": [
+    {
+      "id": "suggest",
+      "kind": "code",
+      "runtime": "wasm32-wasi-json/1",
+      "requires": [],
+      "file": "suggest.wasm",
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": "schemas/output.json"
+      }
+    }
+  ],
+  "output": {
+    "from": "/steps/suggest/output"
+  },
+  "dependencies": {
+    "runtimes": {}
+  }
+}

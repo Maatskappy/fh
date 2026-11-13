@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": [
+    "ready",
+    "words",
+    "feedback"
+  ],
+  "properties": {
+    "ready": {
+      "type": "boolean"
+    },
+    "words": {
+      "type": "integer"
+    },
+    "feedback": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

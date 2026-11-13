@@ -1,0 +1,57 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"fan\",\n      \"kind\": \"parallel\",\n      \"branches\": {\n        \"left\": [\n          {\n            \"id\": \"l\",\n            \"kind\": \"infer\",\n            \"requires\": [],\n            \"instructions\": \"Return JSON.\",\n            \"input\": {\n              \"from\": \"/carry\"\n            },\n            \"output\": {\n              \"schema\": {\n                \"type\": \"object\"\n              }\n            }\n          }\n        ],\n        \"right\": [\n          {\n            \"id\": \"r\",\n            \"kind\": \"infer\",\n            \"requires\": [],\n            \"instructions\": \"Return JSON.\",\n            \"input\": {\n              \"from\": \"/carry\"\n            },\n            \"output\": {\n              \"schema\": {\n                \"type\": \"object\"\n              }\n            }\n          }\n        ]\n      }\n    },\n    {\n      \"id\": \"check\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"check.py\",\n      \"requires\": [],\n      \"input\": {\n        \"fan\": {\n          \"from\": \"/steps/fan/output\"\n        }\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/check/output\"\n  },\n  \"repeat\": {\n    \"from\": \"fan\",\n    \"through\": \"check\",\n    \"max_iterations\": 3,\n    \"until\": {\n      \"from\": \"/steps/check/output/ready\"\n    },\n    \"carry\": {\n      \"initial\": {\n        \"value\": {\n          \"seen\": null\n        }\n      },\n      \"next\": {\n        \"seen\": {\n          \"from\": \"/steps/check/output/seen\"\n        }\n      }\n    }\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n",
+    "check.py": "import json, sys\nx = json.load(sys.stdin)\nl = x['fan']['left']['output']['v']\nr = x['fan']['right']['output']['v']\nprint(json.dumps({'ready': l == r, 'seen': [l, r]}))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {},
+  "scenario": {
+    "responses": [
+      {
+        "path": "fan/left/l",
+        "pass": 1,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "v": 1
+        }
+      },
+      {
+        "path": "fan/right/r",
+        "pass": 1,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "v": 2
+        }
+      },
+      {
+        "path": "fan/left/l",
+        "pass": 2,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "v": 2
+        }
+      },
+      {
+        "path": "fan/right/r",
+        "pass": 2,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "v": 2
+        }
+      }
+    ]
+  }
+}

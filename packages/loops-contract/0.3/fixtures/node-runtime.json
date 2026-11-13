@@ -1,0 +1,13 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"shout\",\n      \"kind\": \"code\",\n      \"runtime\": \"node\",\n      \"file\": \"shout.mjs\",\n      \"requires\": [],\n      \"input\": {\n        \"from\": \"/input\"\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/shout/output\"\n  }\n}\n",
+    "shout.mjs": "export default function (input) {\n  return { said: input.word.toUpperCase() }\n}\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "word": "hi"
+  },
+  "scenario": {
+    "responses": []
+  }
+}

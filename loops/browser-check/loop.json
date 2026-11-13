@@ -1,0 +1,28 @@
+{
+  "format": "loops/0.1",
+  "name": "browser-check",
+  "version": "1.0.0",
+  "inputs": {
+    "schema": "input.schema.json"
+  },
+  "steps": [
+    {
+      "id": "check",
+      "kind": "infer",
+      "requires": [
+        "browser"
+      ],
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": "output.schema.json"
+      },
+      "complexity": "low",
+      "instructions": "Check the supplied page using the browser tool; never guess results from the URL or input. First navigate to input.url and inspect the returned DOM and controls. This page contract starts with no focused control and exactly three tab stops in order: a text input, a checkbox, and a button. In a second browser call, batch key Tab, type input.text, key Tab, key Space, key Tab, key Enter, then observe. Verify the returned focus, input value, checkbox state and visible message. Return entered_text and checkbox_checked from observation and actual_message from the visible result. passed is true only when entered_text equals input.text, checkbox_checked is true, and actual_message equals input.expected_message. Give a short evidence-based reason. A wrong visible result is a valid passed:false domain result; tool or navigation errors must not be represented as successful checks."
+    }
+  ],
+  "output": {
+    "from": "/steps/check/output"
+  }
+}

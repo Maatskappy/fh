@@ -1,0 +1,31 @@
+{
+  "unicode_version": "15.0.0",
+  "snapshot": {
+    "format": "fh.workspace-snapshot/0.1",
+    "workspace": "fixture",
+    "markers": [],
+    "packages": [
+      {
+        "path": "./unicode",
+        "manifest": "{\"format\": \"loops/0.1\", \"name\": \"newly assigned \\ud83e\\udee0 \\ud83e\\udee8\", \"version\": \"0.1.0\", \"description\": \"Suggest a next step from an explicit bounded workspace snapshot without executing discovered packages.\", \"inputs\": {\"schema\": \"schemas/input.json\"}, \"steps\": [{\"id\": \"suggest\", \"kind\": \"code\", \"runtime\": \"python3\", \"requires\": [], \"file\": \"suggest.py\", \"input\": {\"from\": \"/input\"}, \"output\": {\"schema\": \"schemas/output.json\"}}], \"output\": {\"from\": \"/steps/suggest/output\"}}",
+        "state": "captured",
+        "files": [],
+        "inventoryComplete": true
+      }
+    ],
+    "complete": true,
+    "gaps": []
+  },
+  "expected": {
+    "suggestion": "Found nearby Loops. Use /check on a package, then /run when ready.",
+    "nearbyLoops": [
+      {
+        "path": "./unicode",
+        "name": "newly assigned \ud83e\udee0 \ud83e\udee8"
+      }
+    ],
+    "issues": [],
+    "complete": true,
+    "gaps": []
+  }
+}

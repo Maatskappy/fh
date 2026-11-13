@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "passed",
+    "entered_text",
+    "checkbox_checked",
+    "actual_message",
+    "reason"
+  ],
+  "properties": {
+    "passed": {
+      "type": "boolean"
+    },
+    "entered_text": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "checkbox_checked": {
+      "type": "boolean"
+    },
+    "actual_message": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "steps": [
+    {
+      "path": "roster",
+      "pass": 0,
+      "input": {
+        "items": []
+      },
+      "output": {
+        "items": []
+      }
+    },
+    {
+      "path": "each",
+      "pass": 0,
+      "input": [],
+      "output": []
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": []
+  }
+}

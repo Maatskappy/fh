@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "path": "roster",
+      "pass": 0,
+      "input": {
+        "items": {
+          "n": "p"
+        }
+      },
+      "output": {
+        "items": {
+          "n": "p"
+        }
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "failed",
+    "reason": "invalid_map_input"
+  }
+}

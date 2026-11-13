@@ -1,0 +1,102 @@
+{
+  "steps": [
+    {
+      "step": "echo",
+      "pass": 0,
+      "input": {
+        "slash": "slash",
+        "tilde": "tilde",
+        "tildeOne": "tilde-one",
+        "empty": "empty",
+        "null": null,
+        "false": false,
+        "zero": 0,
+        "first": "first",
+        "__proto__": "own-proto",
+        "constructor": "own-constructor",
+        "opaqueLiteral": {
+          "from": "/input/absent"
+        },
+        "opaquePointer": {
+          "from": "/input/absent"
+        },
+        "mixed": {
+          "from": "ordinary",
+          "value": "literal"
+        },
+        "numericFrom": {
+          "from": 7
+        },
+        "array": [
+          false,
+          0,
+          null
+        ]
+      },
+      "output": {
+        "slash": "slash",
+        "tilde": "tilde",
+        "tildeOne": "tilde-one",
+        "empty": "empty",
+        "null": null,
+        "false": false,
+        "zero": 0,
+        "first": "first",
+        "__proto__": "own-proto",
+        "constructor": "own-constructor",
+        "opaqueLiteral": {
+          "from": "/input/absent"
+        },
+        "opaquePointer": {
+          "from": "/input/absent"
+        },
+        "mixed": {
+          "from": "ordinary",
+          "value": "literal"
+        },
+        "numericFrom": {
+          "from": 7
+        },
+        "array": [
+          false,
+          0,
+          null
+        ]
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "slash": "slash",
+      "tilde": "tilde",
+      "tildeOne": "tilde-one",
+      "empty": "empty",
+      "null": null,
+      "false": false,
+      "zero": 0,
+      "first": "first",
+      "__proto__": "own-proto",
+      "constructor": "own-constructor",
+      "opaqueLiteral": {
+        "from": "/input/absent"
+      },
+      "opaquePointer": {
+        "from": "/input/absent"
+      },
+      "mixed": {
+        "from": "ordinary",
+        "value": "literal"
+      },
+      "numericFrom": {
+        "from": 7
+      },
+      "array": [
+        false,
+        0,
+        null
+      ]
+    }
+  }
+}

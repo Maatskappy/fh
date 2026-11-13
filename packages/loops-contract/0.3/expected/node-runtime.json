@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "path": "shout",
+      "pass": 0,
+      "input": {
+        "word": "hi"
+      },
+      "output": {
+        "said": "HI"
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "said": "HI"
+    }
+  }
+}

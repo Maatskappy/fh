@@ -1,0 +1,75 @@
+{
+  "format": "loops/0.1",
+  "name": "carry-counter",
+  "version": "1.0.0",
+  "inputs": {
+    "schema": "schemas/input.json"
+  },
+  "steps": [
+    {
+      "id": "prepare",
+      "kind": "code",
+      "requires": [],
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": "schemas/state.json"
+      },
+      "runtime": "python3",
+      "file": "prepare.py"
+    },
+    {
+      "id": "advance",
+      "kind": "code",
+      "requires": [],
+      "input": {
+        "state": {
+          "from": "/carry"
+        },
+        "target": {
+          "from": "/input/target"
+        }
+      },
+      "output": {
+        "schema": "schemas/pass.json"
+      },
+      "runtime": "python3",
+      "file": "advance.py"
+    },
+    {
+      "id": "finish",
+      "kind": "code",
+      "requires": [],
+      "input": {
+        "from": "/steps/advance/output"
+      },
+      "output": {
+        "schema": "schemas/result.json"
+      },
+      "runtime": "python3",
+      "file": "finish.py"
+    }
+  ],
+  "output": {
+    "from": "/steps/finish/output"
+  },
+  "repeat": {
+    "from": "advance",
+    "through": "advance",
+    "max_iterations": 3,
+    "until": {
+      "from": "/steps/advance/output/ready"
+    },
+    "carry": {
+      "initial": {
+        "from": "/steps/prepare/output"
+      },
+      "next": {
+        "number": {
+          "from": "/steps/advance/output/number"
+        }
+      }
+    }
+  }
+}

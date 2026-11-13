@@ -1,0 +1,31 @@
+{
+  "steps": [
+    {
+      "step": "first",
+      "pass": 0,
+      "input": {
+        "verdict": "fail"
+      },
+      "output": {
+        "verdict": "fail"
+      }
+    },
+    {
+      "step": "last",
+      "pass": 0,
+      "input": {
+        "verdict": "fail"
+      },
+      "output": {
+        "verdict": "fail"
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "verdict": "fail"
+    }
+  }
+}

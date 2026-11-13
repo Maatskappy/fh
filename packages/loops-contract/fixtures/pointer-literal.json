@@ -1,0 +1,27 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.1\",\n  \"name\": \"conformance-edge\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"echo\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"slash\": {\n          \"from\": \"/input/a~1b\"\n        },\n        \"tilde\": {\n          \"from\": \"/input/~0\"\n        },\n        \"tildeOne\": {\n          \"from\": \"/input/~01\"\n        },\n        \"empty\": {\n          \"from\": \"/input/\"\n        },\n        \"null\": {\n          \"from\": \"/input/nil\"\n        },\n        \"false\": {\n          \"from\": \"/input/flag\"\n        },\n        \"zero\": {\n          \"from\": \"/input/zero\"\n        },\n        \"first\": {\n          \"from\": \"/input/array/0\"\n        },\n        \"__proto__\": {\n          \"from\": \"/input/__proto__\"\n        },\n        \"constructor\": {\n          \"from\": \"/input/constructor\"\n        },\n        \"opaqueLiteral\": {\n          \"value\": {\n            \"from\": \"/input/absent\"\n          }\n        },\n        \"opaquePointer\": {\n          \"from\": \"/input/wrapped\"\n        },\n        \"mixed\": {\n          \"from\": {\n            \"value\": \"ordinary\"\n          },\n          \"value\": {\n            \"value\": \"literal\"\n          }\n        },\n        \"numericFrom\": {\n          \"from\": 7\n        },\n        \"array\": [\n          {\n            \"from\": \"/input/flag\"\n          },\n          {\n            \"from\": \"/input/zero\"\n          },\n          {\n            \"value\": null\n          }\n        ]\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/echo/output\"\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "a/b": "slash",
+    "~": "tilde",
+    "~1": "tilde-one",
+    "": "empty",
+    "nil": null,
+    "flag": false,
+    "zero": 0,
+    "array": [
+      "first"
+    ],
+    "__proto__": "own-proto",
+    "constructor": "own-constructor",
+    "wrapped": {
+      "from": "/input/absent"
+    }
+  },
+  "scenario": {
+    "responses": []
+  }
+}

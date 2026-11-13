@@ -1,0 +1,31 @@
+{
+  "steps": [
+    {
+      "path": "draft",
+      "pass": 0,
+      "input": {
+        "topic": "t"
+      },
+      "output": {
+        "text": "ok"
+      }
+    },
+    {
+      "path": "verify",
+      "pass": 0,
+      "input": {
+        "text": "ok"
+      },
+      "output": {
+        "ready": true
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "ready": true
+    }
+  }
+}

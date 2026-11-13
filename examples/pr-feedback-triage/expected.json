@@ -1,0 +1,13 @@
+{
+  "code-repair": "repair_code",
+  "clarification": "answer_reviewer",
+  "infrastructure": "investigate_infrastructure",
+  "informational": "no_action",
+  "ambiguous": "gather_context",
+  "embedded-instructions": "no_action",
+  "stale": "ignore_stale",
+  "unbound": "gather_context",
+  "pending": "wait_for_ci",
+  "passed": "no_action",
+  "quota": "restore_review"
+}

@@ -1,0 +1,129 @@
+{
+  "steps": [
+    {
+      "path": "roster",
+      "pass": 0,
+      "input": {
+        "items": [
+          {
+            "n": "p"
+          },
+          {
+            "n": "q"
+          },
+          {
+            "n": "r"
+          }
+        ]
+      },
+      "output": {
+        "items": [
+          {
+            "n": "p"
+          },
+          {
+            "n": "q"
+          },
+          {
+            "n": "r"
+          }
+        ]
+      }
+    },
+    {
+      "path": "each[0]/judge",
+      "pass": 0,
+      "input": {
+        "item": {
+          "n": "p"
+        },
+        "index": 0
+      },
+      "output": {
+        "verdict": "good"
+      }
+    },
+    {
+      "path": "each[1]/judge",
+      "pass": 0,
+      "input": {
+        "item": {
+          "n": "q"
+        },
+        "index": 1
+      }
+    },
+    {
+      "path": "each[2]/judge",
+      "pass": 0,
+      "input": {
+        "item": {
+          "n": "r"
+        },
+        "index": 2
+      },
+      "output": {
+        "verdict": "fine"
+      }
+    },
+    {
+      "path": "each",
+      "pass": 0,
+      "input": [
+        {
+          "n": "p"
+        },
+        {
+          "n": "q"
+        },
+        {
+          "n": "r"
+        }
+      ],
+      "output": [
+        {
+          "status": "completed",
+          "output": {
+            "verdict": "good"
+          }
+        },
+        {
+          "status": "failed",
+          "error": {
+            "reason": "invalid_output"
+          }
+        },
+        {
+          "status": "completed",
+          "output": {
+            "verdict": "fine"
+          }
+        }
+      ]
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": [
+      {
+        "status": "completed",
+        "output": {
+          "verdict": "good"
+        }
+      },
+      {
+        "status": "failed",
+        "error": {
+          "reason": "invalid_output"
+        }
+      },
+      {
+        "status": "completed",
+        "output": {
+          "verdict": "fine"
+        }
+      }
+    ]
+  }
+}

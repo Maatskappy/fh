@@ -1,0 +1,6 @@
+Fasthands increment-wasm example
+
+fh-authored package files are Apache-2.0; see LICENSE.
+increment.wasm was built with Zig 0.16.0 and includes Zig standard-library and
+compiler-runtime code. Copyright (c) Zig contributors. The complete MIT license
+is retained in licenses/zig/LICENSE. No Zig compiler is needed to run the module.

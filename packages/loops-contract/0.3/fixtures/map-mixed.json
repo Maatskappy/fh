@@ -1,0 +1,57 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"roster\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"from\": \"/input\"\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    },\n    {\n      \"id\": \"each\",\n      \"kind\": \"map\",\n      \"over\": {\n        \"from\": \"/steps/roster/output/items\"\n      },\n      \"steps\": [\n        {\n          \"id\": \"judge\",\n          \"kind\": \"infer\",\n          \"requires\": [],\n          \"instructions\": \"Return JSON.\",\n          \"input\": {\n            \"item\": {\n              \"from\": \"/item\"\n            },\n            \"index\": {\n              \"from\": \"/index\"\n            }\n          },\n          \"output\": {\n            \"schema\": {\n              \"type\": \"object\",\n              \"required\": [\n                \"verdict\"\n              ],\n              \"properties\": {\n                \"verdict\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"additionalProperties\": false\n            }\n          }\n        }\n      ]\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/each/output\"\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "items": [
+      {
+        "n": "p"
+      },
+      {
+        "n": "q"
+      },
+      {
+        "n": "r"
+      }
+    ]
+  },
+  "scenario": {
+    "responses": [
+      {
+        "path": "each[2]/judge",
+        "pass": 0,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "verdict": "fine"
+        }
+      },
+      {
+        "path": "each[0]/judge",
+        "pass": 0,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "verdict": "good"
+        }
+      },
+      {
+        "path": "each[1]/judge",
+        "pass": 0,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "verdict": 7
+        }
+      }
+    ]
+  }
+}

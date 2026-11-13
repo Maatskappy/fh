@@ -1,0 +1,15 @@
+{
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "feedback": {
+    "id": "unbound",
+    "sha": null,
+    "kind": "review",
+    "status": "none",
+    "text": "This appears to fail for anonymous users.",
+    "url": "https://github.com/example/project/pull/42#discussion_r101",
+    "check_name": null,
+    "file": null,
+    "line": null,
+    "review_blocked": false
+  }
+}

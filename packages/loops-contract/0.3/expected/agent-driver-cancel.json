@@ -1,0 +1,8 @@
+{
+  "steps": [],
+  "carry": [],
+  "terminal": {
+    "status": "stopped",
+    "reason": "cancelled"
+  }
+}

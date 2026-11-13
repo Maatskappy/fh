@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install Zig 0.16.0
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: '0.16.0'
+      - name: Check native application
+        env:
+          FH_DATA_DIR: ${{ runner.temp }}/fh-profile
+        run: zig build check test-loops-native test-chat test-portable-examples
+      - name: Check Unix sockets in a long source path
+        run: python3 tests/native/long_socket_path.py
+      - name: Build complete bundle
+        run: zig build bundle -Doptimize=ReleaseFast --prefix "$(mktemp -d "${RUNNER_TEMP}/fh-bundle.XXXXXX")"
+      - name: Verify fx provenance
+        run: python3 patches/fx/verify.py
+      - name: Check provenance rejection boundaries
+        run: python3 -m unittest discover -s tests/provenance -p fx_verify.py
+      - name: Check synthetic PR feedback routing
+        run: python3 -m unittest discover -s tests/native -p pr_feedback_triage_test.py
+      - name: Check release tooling without target compilation
+        run: python3 -m unittest discover -s tests/native -p release_tooling_test.py

@@ -1,0 +1,13 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"__proto__\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"from\": \"/input\"\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    },\n    {\n      \"id\": \"after\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"from\": \"/steps/__proto__/output\"\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/after/output\"\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "x": 1
+  },
+  "scenario": {
+    "responses": []
+  }
+}

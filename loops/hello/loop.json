@@ -1,0 +1,79 @@
+{
+  "format": "loops/0.3",
+  "name": "hello",
+  "version": "1.0.0",
+  "inputs": {
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topic": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "draft",
+      "kind": "infer",
+      "requires": [],
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sentence"
+          ],
+          "properties": {
+            "sentence": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "complexity": "low",
+      "instructions": {
+        "file": "draft.md"
+      }
+    },
+    {
+      "id": "check",
+      "kind": "infer",
+      "requires": [],
+      "input": {
+        "sentence": {
+          "from": "/steps/draft/output/sentence"
+        }
+      },
+      "output": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ok",
+            "sentence"
+          ],
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "sentence": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "complexity": "low",
+      "instructions": {
+        "file": "check.md"
+      }
+    }
+  ],
+  "output": {
+    "from": "/steps/check/output"
+  }
+}

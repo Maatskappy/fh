@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": [
+    "subject",
+    "max_words"
+  ],
+  "properties": {
+    "subject": {
+      "type": "string"
+    },
+    "max_words": {
+      "type": "integer",
+      "minimum": 8,
+      "maximum": 25
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,63 @@
+{
+  "steps": [
+    {
+      "step": "prefix",
+      "pass": 0,
+      "input": {
+        "label": "P"
+      },
+      "output": {
+        "label": "P"
+      }
+    },
+    {
+      "step": "produce",
+      "pass": 1,
+      "input": {
+        "input": {},
+        "steps": {
+          "prefix": {
+            "output": {
+              "label": "P"
+            }
+          }
+        },
+        "carry": {
+          "prior": null,
+          "note": ""
+        }
+      },
+      "output": {
+        "item": "A"
+      }
+    },
+    {
+      "step": "judge",
+      "pass": 1,
+      "input": {
+        "item": "A",
+        "carry": {
+          "prior": null,
+          "note": ""
+        }
+      },
+      "output": {
+        "ready": false,
+        "note": "change"
+      }
+    }
+  ],
+  "carry": [
+    {
+      "forPass": 1,
+      "value": {
+        "prior": null,
+        "note": ""
+      }
+    }
+  ],
+  "terminal": {
+    "status": "failed",
+    "reason": "missing_binding"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["required_checks", "receipts"],
+  "properties": {
+    "required_checks": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "\\S"}},
+    "receipts": {"type": "array", "maxItems": 64, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "exit_code", "duration_ms", "summary"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "\\S"},
+        "exit_code": {"type": "integer", "minimum": -255, "maximum": 255},
+        "duration_ms": {"type": "number", "minimum": 0, "maximum": 86400000},
+        "summary": {"type": "string", "maxLength": 1024}
+      }
+    }},
+    "revision": {"type": "string", "maxLength": 128},
+    "diff_identity": {"type": "string", "maxLength": 256}
+  }
+}

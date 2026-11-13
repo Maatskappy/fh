@@ -1,0 +1,31 @@
+{
+  "steps": [
+    {
+      "path": "__proto__",
+      "pass": 0,
+      "input": {
+        "x": 1
+      },
+      "output": {
+        "x": 1
+      }
+    },
+    {
+      "path": "after",
+      "pass": 0,
+      "input": {
+        "x": 1
+      },
+      "output": {
+        "x": 1
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "x": 1
+    }
+  }
+}

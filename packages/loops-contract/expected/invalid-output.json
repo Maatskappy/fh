@@ -1,0 +1,14 @@
+{
+  "steps": [
+    {
+      "step": "echo",
+      "pass": 0,
+      "input": "bad"
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "failed",
+    "reason": "invalid_output"
+  }
+}

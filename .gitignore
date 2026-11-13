@@ -1,0 +1,16 @@
+.zig-cache/
+zig-out/
+.fasthands/
+.DS_Store
+web/policy.wasm
+dist/
+.dev/
+
+
+.dist-native-*/
+.dist-previous-*/
+/.env
+
+zig-pkg/
+release/
+.dist-release-*/

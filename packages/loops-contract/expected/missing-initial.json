@@ -1,0 +1,19 @@
+{
+  "steps": [
+    {
+      "step": "prefix",
+      "pass": 0,
+      "input": {
+        "label": "P"
+      },
+      "output": {
+        "label": "P"
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "failed",
+    "reason": "missing_binding"
+  }
+}

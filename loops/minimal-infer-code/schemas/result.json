@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": [
+    "title",
+    "words"
+  ],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "words": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}

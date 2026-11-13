@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "workspace", "markers", "packages", "complete", "gaps"],
+  "properties": {
+    "format": {"const": "fh.workspace-snapshot/0.1"},
+    "workspace": {"type": "string", "maxLength": 256},
+    "markers": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 64}},
+    "packages": {"type": "array", "maxItems": 16, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "manifest", "state", "files", "inventoryComplete"],
+      "properties": {
+        "path": {"type": "string", "maxLength": 256},
+        "manifest": {"type": ["string", "null"], "maxLength": 8192},
+        "state": {"enum": ["captured", "unreadable", "oversized", "unsafe"]},
+        "files": {"type": "array", "maxItems": 128, "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "state"],
+          "properties": {"path": {"type": "string", "maxLength": 256}, "state": {"enum": ["present", "missing", "unsafe", "unknown"]}}
+        }},
+        "inventoryComplete": {"type": "boolean"}
+      }
+    }},
+    "complete": {"type": "boolean"},
+    "gaps": {"type": "array", "maxItems": 32, "items": {"type": "string", "maxLength": 256}}
+  }
+}

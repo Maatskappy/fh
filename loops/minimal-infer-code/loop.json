@@ -1,0 +1,39 @@
+{
+  "format": "loops/0.1",
+  "name": "title-word-count",
+  "version": "1.0.0",
+  "inputs": {
+    "schema": "schemas/input.json"
+  },
+  "steps": [
+    {
+      "id": "title",
+      "kind": "infer",
+      "requires": [],
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": "schemas/title.json"
+      },
+      "complexity": "low",
+      "instructions": "Write a short useful title for the supplied topic. Return JSON with the title string."
+    },
+    {
+      "id": "count",
+      "kind": "code",
+      "requires": [],
+      "input": {
+        "from": "/steps/title/output"
+      },
+      "output": {
+        "schema": "schemas/result.json"
+      },
+      "runtime": "python3",
+      "file": "count.py"
+    }
+  ],
+  "output": {
+    "from": "/steps/count/output"
+  }
+}

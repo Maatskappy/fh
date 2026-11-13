@@ -1,0 +1,139 @@
+{
+  "steps": [
+    {
+      "step": "prefix",
+      "pass": 0,
+      "input": {
+        "label": "P"
+      },
+      "output": {
+        "label": "P"
+      }
+    },
+    {
+      "step": "produce",
+      "pass": 1,
+      "input": {
+        "input": {},
+        "steps": {
+          "prefix": {
+            "output": {
+              "label": "P"
+            }
+          }
+        },
+        "carry": {
+          "prior": null,
+          "note": ""
+        }
+      },
+      "output": {
+        "item": "A"
+      }
+    },
+    {
+      "step": "judge",
+      "pass": 1,
+      "input": {
+        "item": "A",
+        "carry": {
+          "prior": null,
+          "note": ""
+        }
+      },
+      "output": {
+        "ready": false,
+        "note": "change"
+      }
+    },
+    {
+      "step": "produce",
+      "pass": 2,
+      "input": {
+        "input": {},
+        "steps": {
+          "prefix": {
+            "output": {
+              "label": "P"
+            }
+          }
+        },
+        "carry": {
+          "prior": "A",
+          "note": "change"
+        }
+      },
+      "output": {
+        "item": "B"
+      }
+    },
+    {
+      "step": "judge",
+      "pass": 2,
+      "input": {
+        "item": "B",
+        "carry": {
+          "prior": "A",
+          "note": "change"
+        }
+      },
+      "output": {
+        "ready": true,
+        "note": "ok"
+      }
+    },
+    {
+      "step": "suffix",
+      "pass": 0,
+      "input": {
+        "item": "B",
+        "assessment": {
+          "ready": true,
+          "note": "ok"
+        },
+        "prefix": {
+          "label": "P"
+        }
+      },
+      "output": {
+        "item": "B",
+        "assessment": {
+          "ready": true,
+          "note": "ok"
+        },
+        "prefix": {
+          "label": "P"
+        }
+      }
+    }
+  ],
+  "carry": [
+    {
+      "forPass": 1,
+      "value": {
+        "prior": null,
+        "note": ""
+      }
+    },
+    {
+      "forPass": 2,
+      "value": {
+        "prior": "A",
+        "note": "change"
+      }
+    }
+  ],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "item": "B",
+      "assessment": {
+        "ready": true,
+        "note": "ok"
+      },
+      "prefix": {
+        "label": "P"
+      }
+    }
+  }
+}

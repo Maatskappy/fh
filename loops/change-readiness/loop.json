@@ -1,0 +1,17 @@
+{
+  "format": "loops/0.1",
+  "name": "change-readiness",
+  "version": "0.1.0",
+  "description": "Assess explicit caller-supplied check receipts without executing checks or invoking a model.",
+  "inputs": {"schema": "schemas/input.json"},
+  "steps": [{
+    "id": "assess",
+    "kind": "code",
+    "runtime": "python3",
+    "requires": [],
+    "file": "assess.py",
+    "input": {"from": "/input"},
+    "output": {"schema": "schemas/output.json"}
+  }],
+  "output": {"from": "/steps/assess/output"}
+}

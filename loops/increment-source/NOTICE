@@ -1,0 +1,4 @@
+Fasthands increment-source example
+
+fh-authored package files are Apache-2.0; see LICENSE.
+Node is a separately supplied source runtime, not included in this package.

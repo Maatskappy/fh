@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["suggestion", "nearbyLoops", "issues", "complete", "gaps"],
+  "properties": {
+    "suggestion": {"type": "string", "minLength": 1, "maxLength": 512},
+    "nearbyLoops": {"type": "array", "maxItems": 8, "items": {
+      "type": "object", "additionalProperties": false, "required": ["path", "name"],
+      "properties": {"path": {"type": "string", "maxLength": 256}, "name": {"type": "string", "maxLength": 128}}
+    }},
+    "issues": {"type": "array", "maxItems": 8, "items": {
+      "type": "object", "additionalProperties": false, "required": ["path", "code", "message"],
+      "properties": {
+        "path": {"type": "string", "maxLength": 256},
+        "code": {"enum": ["malformed_json", "essential_shape", "missing_file"]},
+        "message": {"type": "string", "maxLength": 256}
+      }
+    }},
+    "complete": {"type": "boolean"},
+    "gaps": {"type": "array", "maxItems": 32, "items": {"type": "string", "maxLength": 256}}
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ready", "failed_checks", "missing_checks", "duplicate_checks", "next_action", "evidence"],
+  "properties": {
+    "ready": {"type": "boolean"},
+    "failed_checks": {"$ref": "#/$defs/names"},
+    "missing_checks": {"$ref": "#/$defs/names"},
+    "duplicate_checks": {"$ref": "#/$defs/names"},
+    "next_action": {"type": "string", "maxLength": 256},
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source", "required_count", "receipt_count", "summed_duration_ms", "receipts"],
+      "properties": {
+        "source": {"const": "caller_supplied"},
+        "required_count": {"type": "integer", "minimum": 1, "maximum": 64},
+        "receipt_count": {"type": "integer", "minimum": 0, "maximum": 64},
+        "summed_duration_ms": {"type": "number", "minimum": 0, "maximum": 5529600000},
+        "receipts": {"$ref": "input.json#/properties/receipts"},
+        "revision": {"type": "string", "maxLength": 128},
+        "diff_identity": {"type": "string", "maxLength": 256}
+      }
+    }
+  },
+  "$defs": {
+    "names": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}}
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "format": "loops/0.1", "name": "code-only-count", "version": "1.0.0",
+  "inputs": {"schema": {"type":"object","required":["number"],"properties":{"number":{"type":"integer"}},"additionalProperties":false}},
+  "steps": [{"id":"calculate","kind":"code","runtime":"python3","file":"main.py","input":{"from":"/input"},"output":{"schema":{"type":"object","required":["answer","verdict"],"properties":{"answer":{"type":"integer"},"verdict":{"const":"fail"}},"additionalProperties":false}}}],
+  "output": {"from":"/steps/calculate/output"}
+}

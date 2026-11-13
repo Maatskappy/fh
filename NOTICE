@@ -1,0 +1,57 @@
+Fasthands (fh)
+
+fh-authored additions are licensed under Apache License 2.0; see LICENSE.
+Included upstream material retains its own licenses and notices. Those notices
+remain authoritative for that material; this file does not change their terms.
+
+fh derives from and modifies fx 0.0.13:
+https://github.com/vercel-labs/fx
+Revision: 4d966e272cfc4296cdf703f409480088cf2e72ba
+fx is Apache-2.0. Its original LICENSE and THIRD_PARTY_NOTICES.md (including
+cuelume MIT and Unicode V3 notices) are retained under vendor/fx/ in source
+and licenses/fx/ in the binary bundle. Source provenance is recorded in
+vendor/fx/UPSTREAM.json and patches/fx/README.md; the latter is shipped as
+docs/fx-provenance.md in the bundle. Attribution does not imply endorsement.
+
+Wasmtime 48.0.8, Bytecode Alliance:
+fh statically embeds the full Wasmtime C API, Apache-2.0 WITH LLVM-exception.
+https://github.com/bytecodealliance/wasmtime/releases/tag/v48.0.8
+The complete license and pinned archive/source provenance are retained in
+licenses/wasmtime/LICENSE and licenses/wasmtime/README.md. Native library
+archives are fetched for builds, not committed in this source tree. The retained
+guest Wasm modules do not contain the host Wasmtime runtime.
+
+Zig 0.16.0:
+fh and its retained Zig-built Wasm modules include Zig standard-library and
+compiler-runtime code. Copyright (c) Zig contributors. MIT; complete text in
+licenses/zig/LICENSE.
+
+WASI libc:
+The retained C test fixture native/loops/fixtures/wasm/transform-c.wasm includes
+wasi-libc as bundled by Zig 0.16.0, including musl and cloudlibc portions and
+Zig runtime code. Upstream license alternatives and complete component notices
+are retained in licenses/wasi-libc/ and licenses/zig/LICENSE. The C fixture is
+in the source checkout, not the ordinary product bundle. The Zig Wasm examples
+are built without -lc; their WASI target alone does not imply wasi-libc linkage.
+
+LLVM libunwind:
+Linux builds explicitly link Zig 0.16.0's bundled LLVM unwinder. Its complete
+license, including LLVM exceptions and retained legacy notices, is in
+licenses/llvm-libunwind/LICENSE.TXT.
+
+Unicode/Python-derived property data:
+loops/workspace-check/printable.zig and its compiled module contain Unicode
+15.0.0 printability/whitespace data extracted using Python 3.12.3. fh transformed
+the property results into contiguous nonprintable ranges and a whitespace set
+represented as Zig source. Complete Unicode and pinned Python license texts
+are in licenses/unicode/LICENSE and licenses/python/LICENSE. Python is an
+authoring provenance source; it is not required for running this module.
+
+License source paths and versions are documented in licenses/README.md.
+The new standalone increment-source, increment-wasm and workspace-check Loop
+packages also carry local LICENSE/NOTICE files and applicable complete licenses.
+
+These retained notices cover identified components. The exact full static
+Wasmtime transitive feature/dependency graph and target-specific notice closure
+remain prerequisites before binary publication. They do not establish exhaustive
+third-party coverage or legal/ownership clearance.

@@ -1,0 +1,180 @@
+{
+  "steps": [
+    {
+      "step": "prepare_brief",
+      "pass": 0,
+      "input": {
+        "subject": "Pocket Sundial Lending Kiosk",
+        "audience": "Visitors to a fictional neighborhood learning fair",
+        "features": [
+          "Lends cardboard sundial kits for a short outdoor activity",
+          "Includes a printed shadow-reading guide",
+          "Accepts returned kits in a clearly labeled tray"
+        ]
+      },
+      "output": {
+        "brief": {
+          "subject": "Pocket Sundial Lending Kiosk",
+          "audience": "Visitors to a fictional neighborhood learning fair",
+          "features": [
+            "Lends cardboard sundial kits for a short outdoor activity",
+            "Includes a printed shadow-reading guide",
+            "Accepts returned kits in a clearly labeled tray"
+          ]
+        },
+        "previous_draft": null,
+        "prior_feedback": []
+      }
+    },
+    {
+      "step": "compose_description",
+      "pass": 1,
+      "input": {
+        "brief": {
+          "subject": "Pocket Sundial Lending Kiosk",
+          "audience": "Visitors to a fictional neighborhood learning fair",
+          "features": [
+            "Lends cardboard sundial kits for a short outdoor activity",
+            "Includes a printed shadow-reading guide",
+            "Accepts returned kits in a clearly labeled tray"
+          ]
+        },
+        "previous_draft": null,
+        "prior_feedback": []
+      },
+      "output": {
+        "draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Background\nThe kiosk provides a practical introduction to sundials.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray."
+      }
+    },
+    {
+      "step": "inspect_sections",
+      "pass": 1,
+      "input": {
+        "draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Background\nThe kiosk provides a practical introduction to sundials.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+        "subject": "Pocket Sundial Lending Kiosk"
+      },
+      "output": {
+        "ready": false,
+        "background_present": true,
+        "background_heading_lines": [
+          4
+        ],
+        "headings": [
+          "overview",
+          "background",
+          "use"
+        ],
+        "feedback": [
+          "Remove the Background section headed on line(s) 4, including all of its body text. Keep only Overview and Use sections."
+        ]
+      }
+    },
+    {
+      "step": "compose_description",
+      "pass": 2,
+      "input": {
+        "brief": {
+          "subject": "Pocket Sundial Lending Kiosk",
+          "audience": "Visitors to a fictional neighborhood learning fair",
+          "features": [
+            "Lends cardboard sundial kits for a short outdoor activity",
+            "Includes a printed shadow-reading guide",
+            "Accepts returned kits in a clearly labeled tray"
+          ]
+        },
+        "previous_draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Background\nThe kiosk provides a practical introduction to sundials.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+        "prior_feedback": [
+          "Remove the Background section headed on line(s) 4, including all of its body text. Keep only Overview and Use sections."
+        ]
+      },
+      "output": {
+        "draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray."
+      }
+    },
+    {
+      "step": "inspect_sections",
+      "pass": 2,
+      "input": {
+        "draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+        "subject": "Pocket Sundial Lending Kiosk"
+      },
+      "output": {
+        "ready": true,
+        "background_present": false,
+        "background_heading_lines": [],
+        "headings": [
+          "overview",
+          "use"
+        ],
+        "feedback": []
+      }
+    },
+    {
+      "step": "publish_description",
+      "pass": 0,
+      "input": {
+        "subject": "Pocket Sundial Lending Kiosk",
+        "draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+        "assessment": {
+          "ready": true,
+          "background_present": false,
+          "background_heading_lines": [],
+          "headings": [
+            "overview",
+            "use"
+          ],
+          "feedback": []
+        }
+      },
+      "output": {
+        "subject": "Pocket Sundial Lending Kiosk",
+        "description": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+        "assessment": {
+          "ready": true,
+          "background_present": false,
+          "background_heading_lines": [],
+          "headings": [
+            "overview",
+            "use"
+          ],
+          "feedback": []
+        }
+      }
+    }
+  ],
+  "carry": [
+    {
+      "forPass": 1,
+      "value": {
+        "previous_draft": null,
+        "prior_feedback": []
+      }
+    },
+    {
+      "forPass": 2,
+      "value": {
+        "previous_draft": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Background\nThe kiosk provides a practical introduction to sundials.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+        "prior_feedback": [
+          "Remove the Background section headed on line(s) 4, including all of its body text. Keep only Overview and Use sections."
+        ]
+      }
+    }
+  ],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "subject": "Pocket Sundial Lending Kiosk",
+      "description": "## Overview\nPocket Sundial Lending Kiosk gives visitors to a fictional neighborhood learning fair a short outdoor activity.\n\n## Use\nBorrow a cardboard sundial kit, follow the printed shadow-reading guide, and return the kit to the clearly labeled tray.",
+      "assessment": {
+        "ready": true,
+        "background_present": false,
+        "background_heading_lines": [],
+        "headings": [
+          "overview",
+          "use"
+        ],
+        "feedback": []
+      }
+    }
+  }
+}

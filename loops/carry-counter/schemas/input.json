@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": [
+    "start",
+    "target"
+  ],
+  "properties": {
+    "start": {
+      "type": "integer"
+    },
+    "target": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}

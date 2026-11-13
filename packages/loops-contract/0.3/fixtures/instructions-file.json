@@ -1,0 +1,26 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.3\",\n  \"name\": \"conformance-0-3\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": true\n  },\n  \"steps\": [\n    {\n      \"id\": \"greet\",\n      \"kind\": \"infer\",\n      \"requires\": [],\n      \"instructions\": {\n        \"file\": \"prompts/greet.md\"\n      },\n      \"input\": {\n        \"from\": \"/input\"\n      },\n      \"output\": {\n        \"schema\": {\n          \"type\": \"object\"\n        }\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/greet/output\"\n  }\n}\n",
+    "prompts/greet.md": "Say hello to the bound name.\nReturn {\"greeting\": string}.\n"
+  },
+  "manifestPath": "loop.json",
+  "input": {
+    "name": "Ada"
+  },
+  "scenario": {
+    "responses": [
+      {
+        "path": "greet",
+        "pass": 0,
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        },
+        "output": {
+          "greeting": "Hello Ada"
+        },
+        "instructions": "Say hello to the bound name.\nReturn {\"greeting\": string}.\n"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "draft": "The migration copied 42 rows and matched the checksum.",
+  "requirements": [
+    "Report the copied row count.",
+    "Report whether the checksum matched.",
+    "Use one short sentence."
+  ]
+}

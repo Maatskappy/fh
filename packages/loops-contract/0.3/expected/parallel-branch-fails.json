@@ -1,0 +1,95 @@
+{
+  "steps": [
+    {
+      "path": "pair/a/a1",
+      "pass": 0,
+      "input": {
+        "x": 1
+      },
+      "output": {
+        "a": 1
+      }
+    },
+    {
+      "path": "pair/b/b1",
+      "pass": 0,
+      "input": {
+        "x": 1
+      }
+    },
+    {
+      "path": "pair",
+      "pass": 0,
+      "output": {
+        "a": {
+          "status": "completed",
+          "output": {
+            "a": 1
+          }
+        },
+        "b": {
+          "status": "failed",
+          "error": {
+            "reason": "execution_failed"
+          }
+        }
+      }
+    },
+    {
+      "path": "join",
+      "pass": 0,
+      "input": {
+        "pair": {
+          "a": {
+            "status": "completed",
+            "output": {
+              "a": 1
+            }
+          },
+          "b": {
+            "status": "failed",
+            "error": {
+              "reason": "execution_failed"
+            }
+          }
+        }
+      },
+      "output": {
+        "pair": {
+          "a": {
+            "status": "completed",
+            "output": {
+              "a": 1
+            }
+          },
+          "b": {
+            "status": "failed",
+            "error": {
+              "reason": "execution_failed"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "carry": [],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "pair": {
+        "a": {
+          "status": "completed",
+          "output": {
+            "a": 1
+          }
+        },
+        "b": {
+          "status": "failed",
+          "error": {
+            "reason": "execution_failed"
+          }
+        }
+      }
+    }
+  }
+}

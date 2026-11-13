@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["passed", "command", "exit_code", "stdout", "stderr", "diagnostic_truncated", "files"],
+  "properties": {
+    "passed": {"type":"boolean"},
+    "command": {"type":"string"},
+    "exit_code": {"type":"integer"},
+    "stdout": {"type":"string"},
+    "stderr": {"type":"string"},
+    "diagnostic_truncated": {"type":"boolean"},
+    "files": {"type":"array","maxItems":16,"items":{"type":"object","required":["path","sha256","content"],"properties":{"path":{"type":"string"},"sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},"content":{"type":"string"}},"additionalProperties":false}}
+  },
+  "additionalProperties": false
+}

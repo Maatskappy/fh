@@ -1,0 +1,8 @@
+{
+  "steps": [],
+  "carry": [],
+  "terminal": {
+    "status": "failed",
+    "reason": "missing_binding"
+  }
+}

@@ -1,0 +1,19 @@
+Fasthands workspace-check example
+
+fh-authored package files are Apache-2.0; see LICENSE. Included upstream material
+retains its own licenses and notices.
+
+suggest.wasm was built with Zig 0.16.0 and includes Zig standard-library and
+compiler-runtime code. Copyright (c) Zig contributors. The complete MIT license
+is retained in licenses/zig/LICENSE.
+
+printable.zig and suggest.wasm contain Unicode 15.0.0 printability/whitespace
+data extracted using Python 3.12.3. fh transformed the property results into
+contiguous nonprintable ranges and a whitespace set represented as Zig source.
+Complete Unicode V3 and pinned Python license texts are retained in
+licenses/unicode/LICENSE and licenses/python/LICENSE. Python is an authoring
+provenance source; neither Python nor a Zig compiler is needed to run the module.
+
+Dataset: https://www.unicode.org/Public/15.0.0/ucd/ReadMe.txt
+Python source: https://github.com/python/cpython/tree/v3.12.3
+Unicode terms: https://www.unicode.org/license.txt

@@ -1,0 +1,13 @@
+.{
+    .name = .fh,
+    .version = "0.3.1",
+    .fingerprint = 0x311737b44fb3505a,
+    .minimum_zig_version = "0.16.0",
+    .paths = .{ "build.zig", "build.zig.zon", "fh_main.zig", "fh_tests.zig", "native_tests.zig", "native", "vendor", "README.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "NOTICE", "loops", "skills", "docs", "examples", "tests", "packages", "scripts", "patches", "licenses" },
+    .dependencies = .{
+        .wasmtime_aarch64_macos = .{ .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.8/wasmtime-v48.0.8-aarch64-macos-c-api.tar.xz", .hash = "N-V-__8AAMbdPQTKr09Kbm-5hPVE6e2CPpY9vslxOAPN1aIv", .lazy = true },
+        .wasmtime_x86_64_macos = .{ .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.8/wasmtime-v48.0.8-x86_64-macos-c-api.tar.xz", .hash = "N-V-__8AAOqemASKGgvxRMtawxc1wyNJszfs2iJwIsxHaMjR", .lazy = true },
+        .wasmtime_aarch64_linux = .{ .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.8/wasmtime-v48.0.8-aarch64-linux-c-api.tar.xz", .hash = "N-V-__8AADrnsQVlbwtW_ahWSdySM1xTz-YoBJeKntzvY7PC", .lazy = true },
+        .wasmtime_x86_64_linux = .{ .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v48.0.8/wasmtime-v48.0.8-x86_64-linux-c-api.tar.xz", .hash = "N-V-__8AAOJJZwb2tvkkL3kZBs2RHoUeMuTnq5w6NT_wnhBX", .lazy = true },
+    },
+}

@@ -1,0 +1,167 @@
+{
+  "steps": [
+    {
+      "path": "fan/left/l",
+      "pass": 1,
+      "input": {
+        "seen": null
+      },
+      "output": {
+        "v": 1
+      }
+    },
+    {
+      "path": "fan/right/r",
+      "pass": 1,
+      "input": {
+        "seen": null
+      },
+      "output": {
+        "v": 2
+      }
+    },
+    {
+      "path": "fan",
+      "pass": 1,
+      "output": {
+        "left": {
+          "status": "completed",
+          "output": {
+            "v": 1
+          }
+        },
+        "right": {
+          "status": "completed",
+          "output": {
+            "v": 2
+          }
+        }
+      }
+    },
+    {
+      "path": "check",
+      "pass": 1,
+      "input": {
+        "fan": {
+          "left": {
+            "status": "completed",
+            "output": {
+              "v": 1
+            }
+          },
+          "right": {
+            "status": "completed",
+            "output": {
+              "v": 2
+            }
+          }
+        }
+      },
+      "output": {
+        "ready": false,
+        "seen": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "path": "fan/left/l",
+      "pass": 2,
+      "input": {
+        "seen": [
+          1,
+          2
+        ]
+      },
+      "output": {
+        "v": 2
+      }
+    },
+    {
+      "path": "fan/right/r",
+      "pass": 2,
+      "input": {
+        "seen": [
+          1,
+          2
+        ]
+      },
+      "output": {
+        "v": 2
+      }
+    },
+    {
+      "path": "fan",
+      "pass": 2,
+      "output": {
+        "left": {
+          "status": "completed",
+          "output": {
+            "v": 2
+          }
+        },
+        "right": {
+          "status": "completed",
+          "output": {
+            "v": 2
+          }
+        }
+      }
+    },
+    {
+      "path": "check",
+      "pass": 2,
+      "input": {
+        "fan": {
+          "left": {
+            "status": "completed",
+            "output": {
+              "v": 2
+            }
+          },
+          "right": {
+            "status": "completed",
+            "output": {
+              "v": 2
+            }
+          }
+        }
+      },
+      "output": {
+        "ready": true,
+        "seen": [
+          2,
+          2
+        ]
+      }
+    }
+  ],
+  "carry": [
+    {
+      "forPass": 1,
+      "value": {
+        "seen": null
+      }
+    },
+    {
+      "forPass": 2,
+      "value": {
+        "seen": [
+          1,
+          2
+        ]
+      }
+    }
+  ],
+  "terminal": {
+    "status": "completed",
+    "output": {
+      "ready": true,
+      "seen": [
+        2,
+        2
+      ]
+    }
+  }
+}

@@ -1,0 +1,196 @@
+{
+  "format": "loops/0.1",
+  "name": "warm-context",
+  "version": "1.0.0",
+  "inputs": {
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "project",
+        "rules",
+        "evidence"
+      ],
+      "properties": {
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "check",
+              "status"
+            ],
+            "properties": {
+              "check": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "prepare",
+      "kind": "code",
+      "requires": [],
+      "input": {
+        "from": "/input"
+      },
+      "output": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "task",
+            "project",
+            "rules",
+            "evidence",
+            "failed_checks"
+          ],
+          "properties": {
+            "task": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
+            "project": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
+            "rules": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              }
+            },
+            "evidence": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "check",
+                  "status"
+                ],
+                "properties": {
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed"
+                    ]
+                  }
+                }
+              }
+            },
+            "failed_checks": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              }
+            }
+          }
+        }
+      },
+      "runtime": "python3",
+      "file": "prepare.py"
+    },
+    {
+      "id": "decide",
+      "kind": "infer",
+      "requires": [],
+      "input": {
+        "from": "/steps/prepare/output"
+      },
+      "output": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "blocking_checks",
+            "reason"
+          ],
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "hold"
+              ]
+            },
+            "blocking_checks": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              }
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          }
+        }
+      },
+      "complexity": "low",
+      "instructions": "Make the requested decision using only the supplied project, rules and evidence. All required context is supplied in this first request. If failed_checks is nonempty, return verdict hold and list exactly those checks in blocking_checks. Otherwise return ready with an empty blocking_checks list. Give one short reason tied to the evidence. Do not invent observations or perform setup/discovery."
+    }
+  ],
+  "output": {
+    "from": "/steps/decide/output"
+  }
+}

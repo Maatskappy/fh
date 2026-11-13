@@ -1,0 +1,11 @@
+{
+  "packageFiles": {
+    "loop.json": "{\n  \"format\": \"loops/0.1\",\n  \"name\": \"conformance-edge\",\n  \"version\": \"1.0.0\",\n  \"inputs\": {\n    \"schema\": {\n      \"type\": \"integer\"\n    }\n  },\n  \"steps\": [\n    {\n      \"id\": \"echo\",\n      \"kind\": \"code\",\n      \"runtime\": \"python3\",\n      \"file\": \"echo.py\",\n      \"requires\": [],\n      \"input\": {\n        \"from\": \"/input\"\n      },\n      \"output\": {\n        \"schema\": true\n      }\n    }\n  ],\n  \"output\": {\n    \"from\": \"/steps/echo/output\"\n  }\n}\n",
+    "echo.py": "import json, sys\nprint(json.dumps(json.load(sys.stdin), ensure_ascii=False))\n"
+  },
+  "manifestPath": "loop.json",
+  "input": "bad",
+  "scenario": {
+    "responses": []
+  }
+}
