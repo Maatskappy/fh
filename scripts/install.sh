@@ -1,11 +1,11 @@
 #!/bin/sh
 # Install fh from a prebuilt release.
 #
-#   FH_INSTALL_BASE="$release_base" sh scripts/install.sh
+#   curl -fsSL https://github.com/Maatskappy/fh/releases/latest/download/install.sh | sh
 #
 # Settings:
 #   FH_VERSION       version to install (default: latest)
-#   FH_INSTALL_BASE  explicit release base (required; no public hosting yet)
+#   FH_INSTALL_BASE  release root (default: https://github.com/Maatskappy/fh/releases)
 #   FH_INSTALL_DIR   where bundles are kept (default: ~/.fh/app)
 #   FH_BIN_DIR       where the fh link goes (default: ~/.local/bin)
 #
@@ -64,10 +64,10 @@ cleanup() {
 }
 
 main() {
-  [ -n "${FH_INSTALL_BASE:-}" ] || fail "public binaries are not published yet. Build from source, or set FH_INSTALL_BASE to an explicit release base."
-  base=$FH_INSTALL_BASE
+  base=${FH_INSTALL_BASE:-https://github.com/Maatskappy/fh/releases}
   base=${base%/}
   requested=${FH_VERSION:-latest}
+  requested=${requested#v}
   if [ -z "${FH_INSTALL_DIR:-}" ] || [ -z "${FH_BIN_DIR:-}" ]; then
     [ -n "${HOME:-}" ] || fail "HOME is not set. Set FH_INSTALL_DIR and FH_BIN_DIR instead."
   fi
@@ -83,15 +83,9 @@ main() {
 
   system=$(uname -s)
   machine=$(uname -m)
-  case "$system" in
-    Darwin) os=macos ;;
-    Linux) os=linux ;;
-    *) fail "fh has no build for $system. Supported: macOS and Linux." ;;
-  esac
-  case "$machine" in
-    arm64 | aarch64) arch=aarch64 ;;
-    x86_64 | amd64) arch=x86_64 ;;
-    *) fail "fh has no build for $machine processors. Supported: arm64 and x86_64." ;;
+  case "$system-$machine" in
+    Darwin-arm64 | Darwin-aarch64) os=macos; arch=aarch64 ;;
+    *) fail "fh has no binary for $system-$machine. Available binaries: macOS arm64 (macOS 13 or newer). Build from source: https://github.com/Maatskappy/fh#build-from-source" ;;
   esac
   platform=$os-$arch
 
@@ -113,24 +107,27 @@ main() {
 
   say "Looking up fh $requested for $platform at $base"
   sums=$fh_tmp/SHA256SUMS
-  fetch "$base/$requested/SHA256SUMS" "$sums" || fail "could not download $base/$requested/SHA256SUMS"
-
-  # Each line is "<sha256>  <file name>". For "latest" the version is read from the
-  # one archive name that matches this platform.
   if [ "$requested" = latest ]; then
-    wanted=
-  else
-    wanted=fh-$requested-$platform.tar.gz
+    # Discover the version, then fetch both assets from its fixed tag. A new
+    # release becoming latest during installation cannot mix versions.
+    fetch "$base/latest/download/SHA256SUMS" "$sums" || fail "could not look up the latest fh release at $base"
+    requested=$(awk -v suffix="-$platform.tar.gz" '
+      substr($2, 1, 3) == "fh-" && substr($2, length($2) - length(suffix) + 1) == suffix {
+        name = substr($2, 4, length($2) - length(suffix) - 3)
+        print name
+      }' "$sums")
+    case "$requested" in
+      '' | .* | *[!0-9A-Za-z._-]*) fail "the latest release does not name one fh version for $platform." ;;
+    esac
   fi
-  found=$(awk -v wanted="$wanted" -v suffix="-$platform.tar.gz" '
-    {
-      name = $2
-      sub(/^\*/, "", name)
-      if (wanted != "") { if (name == wanted) print $1, name; next }
-      if (substr(name, 1, 3) != "fh-") next
-      if (length(name) <= length(suffix) + 3) next
-      if (substr(name, length(name) - length(suffix) + 1) == suffix) print $1, name
-    }' "$sums")
+  release=$base/download/v$requested
+  fetch "$release/SHA256SUMS" "$sums" || fail "could not download $release/SHA256SUMS"
+
+  # Each line is "<sha256>  <file name>".
+  wanted=fh-$requested-$platform.tar.gz
+  found=$(awk -v wanted="$wanted" '
+    { name = $2; sub(/^\*/, "", name); if (name == wanted) print $1, name }
+  ' "$sums")
   [ -n "$found" ] || fail "this release has no fh build for $platform."
   [ "$(printf '%s\n' "$found" | awk 'END { print NR }')" = 1 ] || fail "the release lists more than one fh build for $platform."
   expected=${found%% *}
@@ -149,13 +146,13 @@ main() {
   fh_dest=$install_dir/$version
   say ""
   say "This will:"
-  say "  download  $base/$requested/$archive"
+  say "  download  $release/$archive"
   say "  check     its SHA-256 is $expected"
   say "  install   fh $version in $fh_dest"
   say "  link      $link -> $fh_dest/fh"
   say ""
 
-  fetch "$base/$requested/$archive" "$fh_tmp/$archive" || fail "could not download $base/$requested/$archive"
+  fetch "$release/$archive" "$fh_tmp/$archive" || fail "could not download $release/$archive"
   actual=$(sha256_of "$fh_tmp/$archive")
   if [ "$actual" != "$expected" ]; then
     fail "the download does not match its checksum (expected $expected, got $actual). Nothing was installed."

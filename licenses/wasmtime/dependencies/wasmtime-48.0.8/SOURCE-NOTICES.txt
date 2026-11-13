@@ -1,0 +1,3 @@
+SOURCE src/runtime/vm/parking_spot.rs
+        // This is a modified version of the parking_lot_core tests,
+        // which are licensed under the MIT and Apache 2.0 licenses.

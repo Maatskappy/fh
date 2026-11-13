@@ -1,0 +1,119 @@
+SOURCE src/checker.rs
+/*
+ * The following code is derived from `lib/src/checker.rs` in the
+ * regalloc.rs project
+ * (https://github.com/bytecodealliance/regalloc.rs). regalloc.rs is
+ * also licensed under Apache-2.0 with the LLVM exception, as the rest
+ * of regalloc2 is.
+ */
+
+SOURCE src/domtree.rs
+/*
+ * Derives from the dominator tree implementation in regalloc.rs, which is
+ * licensed under the Apache Public License 2.0 with LLVM Exception. See:
+ * https://github.com/bytecodealliance/regalloc.rs
+ */
+
+SOURCE src/ion/data_structures.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/liveranges.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/merge.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/mod.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/moves.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/process.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/requirement.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */
+
+SOURCE src/ion/spill.rs
+/*
+ * This file was initially derived from the files
+ * `js/src/jit/BacktrackingAllocator.h` and
+ * `js/src/jit/BacktrackingAllocator.cpp` in Mozilla Firefox, and was
+ * originally licensed under the Mozilla Public License 2.0. We
+ * subsequently relicensed it to Apache-2.0 WITH LLVM-exception (see
+ * https://github.com/bytecodealliance/regalloc2/issues/7).
+ *
+ * Since the initial port, the design has been substantially evolved
+ * and optimized.
+ */

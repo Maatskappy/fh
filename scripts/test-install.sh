@@ -39,16 +39,6 @@ not_ok() {
   exit 1
 }
 
-# With no explicit base the shipped installer must stop before even needing PATH
-# tools or touching an install directory. No network client is available here.
-mkdir -p "$scratch/unpublished/home"
-if env -i PATH= HOME="$scratch/unpublished/home" /bin/sh "$installer" >"$scratch/unpublished/output" 2>&1; then
-  not_ok "the installer accepted an absent release base"
-fi
-grep -q 'public binaries are not published yet' "$scratch/unpublished/output" || not_ok "no clear source-only publication error"
-[ -z "$(ls -A "$scratch/unpublished/home")" ] || not_ok "the unpublished installer changed HOME"
-ok "without an explicit base the installer stops before networking"
-
 if [ $# -ge 1 ]; then
   release=$(CDPATH= cd -- "$1" && pwd)
 else
@@ -59,17 +49,16 @@ version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["vers
 archive=fh-$version-$platform.tar.gz
 [ -f "$release/$archive" ] || not_ok "$release has no $archive"
 
-# The served layout: releases/VERSION/ and releases/latest/ hold the same files, and
-# the installer itself sits at /install. A second tree serves a damaged archive.
+# Mirror GitHub's release paths. latest redirects only for discovery; no archive
+# is served at latest, so fetching an unpinned archive makes the test fail.
 site=$scratch/site
-mkdir -p "$scratch/tmp" "$site/releases/$version" "$site/releases/latest" "$site/damaged/$version"
+mkdir -p "$scratch/tmp" "$site/releases/download/v$version" "$site/damaged/download/v$version"
 for file in "$archive" SHA256SUMS manifest.json; do
-  cp "$release/$file" "$site/releases/$version/$file"
-  cp "$release/$file" "$site/releases/latest/$file"
+  cp "$release/$file" "$site/releases/download/v$version/$file"
 done
 cp "$installer" "$site/install"
-cp "$release/SHA256SUMS" "$site/damaged/$version/SHA256SUMS"
-python3 - "$release/$archive" "$site/damaged/$version/$archive" <<'PY'
+cp "$release/SHA256SUMS" "$site/damaged/download/v$version/SHA256SUMS"
+python3 - "$release/$archive" "$site/damaged/download/v$version/$archive" <<'PY'
 import sys
 data = bytearray(open(sys.argv[1], 'rb').read())
 data[len(data) // 2] ^= 0xFF
@@ -77,7 +66,20 @@ open(sys.argv[2], 'wb').write(data)
 PY
 
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-python3 -m http.server "$port" --bind 127.0.0.1 --directory "$site" >"$scratch/server.log" 2>&1 &
+python3 - "$port" "$site" "$version" >"$scratch/server.log" 2>&1 <<'SERVER' &
+import http.server, os, sys
+port, site, version = sys.argv[1:]
+os.chdir(site)
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/releases/latest/download/SHA256SUMS':
+            self.send_response(302)
+            self.send_header('Location', '/releases/download/v' + version + '/SHA256SUMS')
+            self.end_headers()
+        else:
+            super().do_GET()
+http.server.HTTPServer(('127.0.0.1', int(port)), Handler).serve_forever()
+SERVER
 server=$!
 url=http://127.0.0.1:$port
 tries=0
@@ -119,7 +121,7 @@ for shell in $shells; do
   [ "$("$bin" --version)" = "fh $version" ] || not_ok "$shell: installed fh --version is not 'fh $version'"
   "$bin" --help >"$scratch/$name/help" || not_ok "$shell: installed fh --help failed"
   grep -q 'Usage: fh' "$scratch/$name/help" || not_ok "$shell: fh --help printed no usage"
-  for bundled in docs/loops.md lib/packages/loops-contract/loop-0.1.schema.json skills/author-loop/SKILL.md loops licenses/fx/LICENSE; do
+  for bundled in docs/loops.md lib/packages/loops-contract/loop-0.1.schema.json skills/author-loop/SKILL.md loops licenses/fx/LICENSE licenses/wasmtime/inventory-aarch64-macos.json licenses/wasmtime/rust-1.97.0/COPYRIGHT-library.html licenses/wasmtime/rust-1.97.0/compiler-builtins-LICENSE.txt; do
     [ -e "$scratch/$name/app/$version/$bundled" ] || not_ok "$shell: the bundle is missing $bundled"
   done
   [ -z "$(ls -A "$scratch/$name/home")" ] || not_ok "$shell: the installer wrote into the home folder"
@@ -157,9 +159,54 @@ mkdir -p "$scratch/$name/fake"
 printf '#!/bin/sh\necho Plan9\n' >"$scratch/$name/fake/uname"
 chmod +x "$scratch/$name/fake/uname"
 if run "$name" sh PATH="$scratch/$name/fake:$PATH"; then not_ok "an unsupported system was accepted"; fi
-grep -q 'no build for Plan9' "$scratch/$name/output" || not_ok "an unsupported system was refused for another reason"
+grep -q 'no binary for Plan9-Plan9' "$scratch/$name/output" || not_ok "an unsupported system was refused for another reason"
 installed_nothing "$name" || not_ok "an unsupported system left files behind"
 ok "an unsupported system is refused plainly"
+
+for pair in Linux-arm64 Darwin-x86_64; do
+  name=unsupported-$pair
+  mkdir -p "$scratch/$name/fake"
+  printf '#!/bin/sh\ncase "$1" in -s) echo %s;; -m) echo %s;; esac\n' "${pair%-*}" "${pair#*-}" >"$scratch/$name/fake/uname"
+  chmod +x "$scratch/$name/fake/uname"
+  if run "$name" sh PATH="$scratch/$name/fake:$PATH"; then not_ok "$pair was accepted"; fi
+  grep -q "no binary for $pair" "$scratch/$name/output" || not_ok "$pair: no platform error"
+  installed_nothing "$name" || not_ok "$pair installed files"
+  ok "$pair is refused with source-build guidance"
+done
+
+# Exercise the default public URL without contacting GitHub. Only the host is
+# mapped onto our fixture; all release paths remain exactly as requested.
+name=default-base
+mkdir -p "$scratch/$name/fake"
+real_curl=$(command -v curl)
+cat >"$scratch/$name/fake/curl" <<'CURL'
+#!/bin/sh
+for arg do
+  case "$arg" in
+    https://github.com/Maatskappy/fh/releases/*)
+      url=$FIXTURE_URL/releases/${arg#https://github.com/Maatskappy/fh/releases/}
+      shift
+      exec "$FIXTURE_CURL" "$@" "$url"
+      ;;
+    *) set -- "$@" "$arg"; shift ;;
+  esac
+done
+exit 1
+CURL
+chmod +x "$scratch/$name/fake/curl"
+run "$name" sh FH_INSTALL_BASE= PATH="$scratch/$name/fake:$PATH" FIXTURE_URL="$url" FIXTURE_CURL="$real_curl" || not_ok "default GitHub base failed"
+[ "$("$scratch/$name/bin/fh" --version)" = "fh $version" ] || not_ok "default base installed wrong version"
+ok "default GitHub release URLs install through the local fixture"
+
+name=tag-version
+run "$name" sh FH_VERSION="v$version" || not_ok "v-prefixed explicit version failed"
+ok "explicit v-prefixed version uses the fixed tag"
+
+grep -q 'GET /releases/latest/download/SHA256SUMS ' "$scratch/server.log" || not_ok "latest discovery URL not exercised"
+grep -q "GET /releases/download/v$version/SHA256SUMS " "$scratch/server.log" || not_ok "pinned checksum URL not exercised"
+grep -q "GET /releases/download/v$version/$archive " "$scratch/server.log" || not_ok "pinned archive URL not exercised"
+if grep -q "GET /releases/latest/download/$archive " "$scratch/server.log"; then not_ok "archive was fetched through latest"; fi
+ok "latest discovers then pins both checksum and archive to one version"
 
 name=occupied
 mkdir -p "$scratch/$name/bin"

@@ -24,7 +24,7 @@ cd "$root"
 
 version=
 out=
-targets=$all_targets
+targets=aarch64-macos
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) [ $# -ge 2 ] || usage; out=$2; shift 2 ;;
