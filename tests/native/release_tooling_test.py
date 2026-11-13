@@ -88,12 +88,22 @@ if sys.argv[1:3] == ["build", "bundle"]:
                 self.assertIn("expected one .version in build.zig.zon", result.stderr)
                 self.assertFalse((self.root / "zig-calls.jsonl").exists())
 
+    def installer_env(self):
+        # These fixtures contain shell executables, so exercise the published
+        # platform independently of the machine running source checks.
+        tools = self.root / "installer-bin"
+        tools.mkdir(exist_ok=True)
+        uname = tools / "uname"
+        uname.write_text('#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo arm64;; esac\n')
+        uname.chmod(0o755)
+        return dict(self.env, PATH=str(tools) + os.pathsep + self.env["PATH"])
+
     def test_default_installer_uses_pinned_github_release_url(self):
         client = self.root / "bin/curl"
         called = self.root / "network-called"
         client.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(called) + '"\nexit 1\n')
         client.chmod(0o755)
-        env = dict(self.env, FH_VERSION="4.5.6", FH_INSTALL_DIR=str(self.root / "app"),
+        env = dict(self.installer_env(), FH_VERSION="4.5.6", FH_INSTALL_DIR=str(self.root / "app"),
                    FH_BIN_DIR=str(self.root / "links"))
         env.pop("FH_INSTALL_BASE", None)
         result = subprocess.run(["sh", str(ROOT / "scripts/install.sh")], env=env,
@@ -109,8 +119,7 @@ if sys.argv[1:3] == ["build", "bundle"]:
         import tarfile
 
         version = "9.8.7"
-        arch, system = self.target.split("-")
-        name = f"fh-{version}-{system}-{arch}"
+        name = f"fh-{version}-macos-aarch64"
         bundle = self.root / name
         bundle.mkdir()
         binary = bundle / "fh"
@@ -132,7 +141,7 @@ if sys.argv[1:3] == ["build", "bundle"]:
         (release / "SHA256SUMS").write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n")
         (release / "manifest.json").write_text(json.dumps({"version": version}))
         result = subprocess.run(["sh", str(ROOT / "scripts/test-install.sh"), str(release)],
-                                cwd=self.root, text=True, capture_output=True)
+                                cwd=self.root, env=self.installer_env(), text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("test-install: all passed for fh 9.8.7", result.stdout)
 
